@@ -577,7 +577,7 @@ if __name__=='__main__':
     
     print("Loading WSD Model!")
     
-    WSD = Word_Sense_Model(device_number = args.device, use_cuda = args.no_cuda)
+    WSD = Word_Sense_Model(device_number=args.device, use_cuda=args.no_cuda)
     
     print("Loaded WSD Model!")
     
@@ -591,4 +591,4 @@ if __name__=='__main__':
                                   k=nn,
                                   use_euclidean = args.use_euclidean, 
                                   reduced_search = args.reduced_search)
-                                  
+
