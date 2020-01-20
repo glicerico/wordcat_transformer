@@ -4,8 +4,7 @@ import argparse
 import numpy as np
 
 from transformers import BertTokenizer, BertModel
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.metrics.pairwise import euclidean_distances
+from sklearn.cluster import KMeans
 
 from tqdm import tqdm, trange
 import warnings
@@ -129,6 +128,8 @@ class WordSenseModel:
         _test_root, _test_tree = self.open_xml_file(corpus_file)
 
         embeddings_count = 0
+        embeddings = []
+        labels = []
 
         fo = open(save_to, "w")
         fl = open(labels_file, "w")
@@ -146,16 +147,27 @@ class WordSenseModel:
             for idx, j in enumerate(zip(senses, sent)):
                 word = j[1]
                 embedding = np.mean(final_layer[token_count:token_count + len(self.apply_bert_tokenizer(word))], 0)
+                embeddings.append(embedding)
                 token_count += len(self.apply_bert_tokenizer(word))
 
-                embedding.tofile(fo, sep="\t", format="%.3f")
-                fo.write("\n")
-                fl.write(word + "\n")
+                #embedding.tofile(fo, sep="\t", format="%.3f")
+                #fo.write("\n")
+                #fl.write(word + "\n")
+                labels.append(word)
                 embeddings_count += 1
 
         fo.close()
         fl.close()
+        labels = np.array(labels)
         print(f"{embeddings_count} EMBEDDINGS STORED TO FILE: {str(save_to)}")
+        n_clusters = 30
+        estimator = KMeans(init="k-means++", n_clusters=n_clusters, n_jobs=4)
+        estimator.fit(embeddings)
+        for i in range(n_clusters):
+            print(f"Cluster #{i}:")
+            #print(estimator.labels_==i)
+            print(labels[estimator.labels_==i])
+        print("Finished clustering")
 
 
 if __name__ == '__main__':
