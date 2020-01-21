@@ -164,7 +164,7 @@ class WordSenseModel:
         :param kwargs:
         """
         # estimator = KMeans(init="k-means++", n_clusters=20, n_jobs=4)
-        estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.3, eps=0.3)#, cluster_method='dbscan', n_jobs=4, min_samples=1)
+        estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.3, eps=0.3)
         #estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.3)
         estimator.fit(data)
         print(estimator.labels_)
@@ -174,12 +174,12 @@ class WordSenseModel:
             words = np.array(words)
             for i in range(num_clusters):
                 print(f"Cluster #{i}:")
-                fo.write(f"Cluster #{i}:\n")
+                fo.write(f"Cluster #{i}:\n[")
                 # print(estimator.labels_==i)
                 category = words[estimator.labels_ == i]
                 print(category)
-                fo.write(category)
-                fo.write('\n')
+                category.tofile(fo, sep=", ")
+                fo.write(']\n')
             print("Finished clustering")
 
         print(f"Num clusters: {num_clusters}")
