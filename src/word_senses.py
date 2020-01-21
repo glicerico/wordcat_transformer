@@ -5,6 +5,7 @@ import numpy as np
 
 from transformers import BertTokenizer, BertModel
 from sklearn.cluster import KMeans
+from sklearn.cluster import OPTICS, DBSCAN
 
 from tqdm import tqdm, trange
 import warnings
@@ -112,26 +113,23 @@ class WordSenseModel:
 
             else:
                 _final_layer = _e2[0].numpy()
+                _final_layer = np.around(_final_layer, decimals=4)  # LOWER PRECISION, process faster. CHECK if good!!
 
         return _final_layer
 
     def get_embeddings(self,
-                       corpus_file,
-                       save_to):
+                       corpus_file):
         """
-        Finds BERT embeddings for all words in train_file, and writes them to file
-        :param corpus_file: file to obtain vocabulary from
-        :param save_to:     where to store the word clusters
-        :return: None
+        Finds BERT data for all words in train_file, and writes them to file
+        :param corpus_file:     file to obtain vocabulary from
+        :return: data:    data for the words in corpus_file
         """
 
         _test_root, _test_tree = self.open_xml_file(corpus_file)
 
         embeddings_count = 0
-        embeddings = []
-        labels = []
-
-        fo = open(save_to, "w")
+        all_embeddings = []
+        words = []
 
         for i in tqdm(_test_root.iter('sentence')):
 
@@ -146,26 +144,45 @@ class WordSenseModel:
             for idx, j in enumerate(zip(senses, sent)):
                 word = j[1]
                 embedding = np.mean(final_layer[token_count:token_count + len(self.apply_bert_tokenizer(word))], 0)
-                embeddings.append(embedding)
+                all_embeddings.append(embedding)
                 token_count += len(self.apply_bert_tokenizer(word))
 
-                labels.append(word)
+                words.append(word)
                 embeddings_count += 1
 
-        print(f"{embeddings_count} EMBEDDINGS STORED TO FILE: {str(save_to)}")
-        fo.close()
+        print(f"{embeddings_count} EMBEDDINGS GENERATED")
 
-        # Cluster and print clusters
-        n_clusters = 30
-        estimator = KMeans(init="k-means++", n_clusters=n_clusters, n_jobs=4)
-        estimator.fit(embeddings)
-        labels = np.array(labels)
-        for i in range(n_clusters):
-            print(f"Cluster #{i}:")
-            #print(estimator.labels_==i)
-            print(labels[estimator.labels_==i])
-        print("Finished clustering")
+        return all_embeddings, words
 
+    def cluster_embeddings(self, data, words, cluster_file, *kwargs):
+        """
+        Cluster the data vectors using an sklearn algorithm, and write clusters to file
+
+        :param data:            Embeddings to cluster
+        :param words:           Words corresponding to each data vector
+        :param cluster_file:    File to write the clusters
+        :param kwargs:
+        """
+        # estimator = KMeans(init="k-means++", n_clusters=20, n_jobs=4)
+        estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.3, eps=0.3)#, cluster_method='dbscan', n_jobs=4, min_samples=1)
+        #estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.3)
+        estimator.fit(data)
+        print(estimator.labels_)
+        num_clusters = max(estimator.labels_)
+
+        with open(cluster_file, "w") as fo:
+            words = np.array(words)
+            for i in range(num_clusters):
+                print(f"Cluster #{i}:")
+                fo.write(f"Cluster #{i}:\n")
+                # print(estimator.labels_==i)
+                category = words[estimator.labels_ == i]
+                print(category)
+                fo.write(category)
+                fo.write('\n')
+            print("Finished clustering")
+
+        print(f"Num clusters: {num_clusters}")
 
 if __name__ == '__main__':
 
@@ -176,13 +193,13 @@ if __name__ == '__main__':
     parser.add_argument('--corpus', type=str, required=True, help='Training Corpus')
     parser.add_argument('--start_k', type=int, default=1, help='First number of clusters to use')
     parser.add_argument('--end_k', type=int, default=1, help='Final number of clusters to use')
-    parser.add_argument('--embeddings_file', type=str, help='Where to save the embeddings')
+    parser.add_argument('--embeddings_file', type=str, help='Where to save the data')
     parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
 
     args = parser.parse_args()
 
     print("Corpus is: " + args.corpus)
-    print("Number of clusters: " + str(args.end_k))
+    # print("Number of clusters: " + str(args.end_k))
 
     if args.no_cuda:
         print("Processing with CUDA!")
@@ -203,5 +220,5 @@ if __name__ == '__main__':
     print("Loaded WSD Model!")
 
     for nn in range(args.start_k, args.end_k + 1):
-        WSD.get_embeddings(corpus_file=args.corpus,
-                           save_to=args.embeddings_file[:-4] + "_" + str(nn) + args.embeddings_file[-4:])
+        embeddings, labels = WSD.get_embeddings(corpus_file=args.corpus)
+        WSD.cluster_embeddings(embeddings, labels, args.embeddings_file)
