@@ -154,7 +154,7 @@ class WordSenseModel:
 
         return all_embeddings, words
 
-    def cluster_embeddings(self, data, words, cluster_file, *kwargs):
+    def cluster_embeddings(self, data, words, cluster_file, k):
         """
         Cluster the data vectors using an sklearn algorithm, and write clusters to file
 
@@ -163,12 +163,12 @@ class WordSenseModel:
         :param cluster_file:    File to write the clusters
         :param kwargs:
         """
-        # estimator = KMeans(init="k-means++", n_clusters=20, n_jobs=4)
-        estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.3, eps=0.3)
-        #estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.3)
+        estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
+        # estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.1, eps=0.1)
+        # estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=4, eps=0.3)
         estimator.fit(data)
         print(estimator.labels_)
-        num_clusters = max(estimator.labels_)
+        num_clusters = max(estimator.labels_) + 1
 
         with open(cluster_file, "w") as fo:
             words = np.array(words)
@@ -178,7 +178,8 @@ class WordSenseModel:
                 # print(estimator.labels_==i)
                 category = words[estimator.labels_ == i]
                 print(category)
-                category.tofile(fo, sep=", ")
+                # category.tofile(fo, sep=", ")
+                np.savetxt(fo, category, fmt="%s", newline=", ")
                 fo.write(']\n')
             print("Finished clustering")
 
@@ -193,6 +194,7 @@ if __name__ == '__main__':
     parser.add_argument('--corpus', type=str, required=True, help='Training Corpus')
     parser.add_argument('--start_k', type=int, default=1, help='First number of clusters to use')
     parser.add_argument('--end_k', type=int, default=1, help='Final number of clusters to use')
+    parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
     parser.add_argument('--embeddings_file', type=str, help='Where to save the data')
     parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
 
@@ -219,6 +221,7 @@ if __name__ == '__main__':
 
     print("Loaded WSD Model!")
 
-    for nn in range(args.start_k, args.end_k + 1):
+    for nn in range(args.start_k, args.end_k + 1, args.step_k):
         embeddings, labels = WSD.get_embeddings(corpus_file=args.corpus)
-        WSD.cluster_embeddings(embeddings, labels, args.embeddings_file)
+        save_to = args.embeddings_file[:-4] + "_" + str(nn) + args.embeddings_file[-4:]
+        WSD.cluster_embeddings(embeddings, labels, save_to, nn)
