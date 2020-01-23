@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import torch
 import argparse
 import numpy as np
+import random as rand
 
 from transformers import BertTokenizer, BertModel
 from sklearn.cluster import KMeans
@@ -153,20 +154,24 @@ class WordSenseModel:
 
     def calculate_embeddings(self, corpus_file):
         """
-        Finds BERT data for all words in corpus_file, and writes them to file
+        Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
         :param corpus_file:     file to obtain vocabulary from
-        :return: data:    data for the words in corpus_file
+        :return:                sentences, vocab_map, embeddings
         """
 
         _test_root, _test_tree = self.open_xml_file(corpus_file)
 
         embeddings_count = 0
-        all_embeddings = []
-        words = []
+        all_embeddings = []  # Store each sent_embeddings as elements
+        sent_embeddings = []  # Store one sentence's word embeddings as elements
+        _sentences = []  # Store textual sentences
+        _vocab_map = {}  # Store occurrences of each word in corpus
 
-        for i in tqdm(_test_root.iter('sentence')):
+        # Process each sentence in corpus
+        for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
 
             sent, sent1, senses = self.semeval_sent_sense_collect(i)
+            _sentences.append(sent1)
 
             bert_tokens = self.collect_bert_tokens(sent)
 
@@ -174,50 +179,74 @@ class WordSenseModel:
 
             token_count = 1
 
-            for idx, j in enumerate(zip(senses, sent)):
+            # Process all words in sentence
+            for word_pos, j in enumerate(zip(senses, sent)):
                 word = j[1]
+                # Register word location in vocabulary dictionary
+                if word not in _vocab_map.keys():
+                    _vocab_map[word] = []
+                _vocab_map[word].append((sent_nbr, word_pos))
+
                 embedding = np.mean(final_layer[token_count:token_count + len(self.apply_bert_tokenizer(word))], 0)
-                all_embeddings.append(embedding)
+                sent_embeddings.append(embedding)
                 token_count += len(self.apply_bert_tokenizer(word))
 
-                words.append(word)
                 embeddings_count += 1
+
+            # Store this sentence embeddings in the general list
+            all_embeddings.append(sent_embeddings)
+            all_embeddings = np.float32(all_embeddings)  # Lower precision for speed
 
         print(f"{embeddings_count} EMBEDDINGS GENERATED")
 
-        return all_embeddings, words
+        return _sentences, _vocab_map, all_embeddings
 
-    def cluster_embeddings(self, data, words, cluster_file, k):
+    @staticmethod
+    def disambiguate(_sentences, _vocab_map, _embeddings, freq_threshold=5, **kwargs):
         """
-        Cluster the data vectors using an sklearn algorithm, and write clusters to file
+        Disambiguate word senses through clustering their transformer embeddings
+        Clustering is done using the selected sklearn algorithm.
 
-        :param data:            Embeddings to cluster
-        :param words:           Words corresponding to each data vector
-        :param cluster_file:    File to write the clusters
-        :param kwargs:
+        :param _sentences:      List of corpus sentences
+        :param _vocab_map:      Dictionary that stores coordinates of every occurrence of each word
+        :param _embeddings:     Embeddings for all words in corpus
+        :param freq_threshold:  Frequency threshold for a word to be disambiguated
+        :param kwargs:          Clustering parameters
         """
+        # Init clustering object
+        k = kwargs.get('k', 10)  # 10 is default value, if no kwargs were passed
         estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
         # estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.1, eps=0.1)
         # estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=4, eps=0.3)
-        data = np.float32(data)
-        estimator.fit(data)
-        print(estimator.labels_)
-        num_clusters = max(estimator.labels_) + 1
 
-        with open(cluster_file, "w") as fo:
-            words = np.array(words)
-            for i in range(num_clusters):
-                print(f"Cluster #{i}:")
-                fo.write(f"Cluster #{i}:\n[")
-                # print(estimator.labels_==i)
-                category = words[estimator.labels_ == i]
-                print(category)
-                # category.tofile(fo, sep=", ")
-                np.savetxt(fo, category, fmt="%s", newline=", ")
-                fo.write(']\n')
-            print("Finished clustering")
+        # Loop for each word in vocabulary
+        for word, instances in _vocab_map.items():
+            if len(instances < freq_threshold):  # Don't disambiguate if word is uncommon
+                pass
 
-        print(f"Num clusters: {num_clusters}")
+            curr_embeddings = []
+            # Build embeddings list for this word
+            for instance in instances:
+                x, y = instance  # Get current word instance coordinates
+                curr_embeddings.append(_embeddings[x][y])
+
+            estimator.fit(curr_embeddings)  # Disambiguate
+            num_clusters = max(estimator.labels_) + 1
+            print(f"Num clusters: {num_clusters}")
+
+            # Write disambiguated senses to file, with some sentence examples
+            with open(word + "_KMeans_" + str(k) + ".disamb", "w") as fo:
+                for i in range(num_clusters):
+                    print(f"Cluster #{i}:")
+                    fo.write(f"Cluster #{i}:\n[")
+                    sense_members = instances[estimator.labels_ == i]
+                    np.savetxt(fo, sense_members, fmt="%s", newline=", ")
+                    fo.write(']\n')
+                    # Write at most 3 sentence examples for the word sense
+                    sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
+                    fo.write('Samples:\n')
+                    for sample, _ in sent_samples:
+                        fo.write(_sentences[sample] + '\n')
 
 
 if __name__ == '__main__':
@@ -258,8 +287,8 @@ if __name__ == '__main__':
 
     print("Loaded WSD Model!")
 
-    embeddings, labels = WSD.first_pass(args.pickle_file, args.corpus)
+    sentences, vocab_map, embeddings = WSD.load_embeddings(args.pickle_file, args.corpus)
 
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
         save_to = args.embeddings_file[:-4] + "_" + str(nn) + args.embeddings_file[-4:]
-        WSD.cluster_embeddings(embeddings, labels, save_to, nn)
+        WSD.disambiguate(sentences, vocab_map, embeddings, nn)
