@@ -1,3 +1,4 @@
+import os
 import pickle
 import xml.etree.ElementTree as ET
 import torch
@@ -188,21 +189,20 @@ class WordSenseModel:
                 _vocab_map[word].append((sent_nbr, word_pos))
 
                 embedding = np.mean(final_layer[token_count:token_count + len(self.apply_bert_tokenizer(word))], 0)
-                sent_embeddings.append(embedding)
+                sent_embeddings.append(np.float32(embedding))  # Lower precision for speed
                 token_count += len(self.apply_bert_tokenizer(word))
 
                 embeddings_count += 1
 
             # Store this sentence embeddings in the general list
             all_embeddings.append(sent_embeddings)
-            all_embeddings = np.float32(all_embeddings)  # Lower precision for speed
 
         print(f"{embeddings_count} EMBEDDINGS GENERATED")
 
         return _sentences, _vocab_map, all_embeddings
 
     @staticmethod
-    def disambiguate(_sentences, _vocab_map, _embeddings, freq_threshold=5, **kwargs):
+    def disambiguate(_sentences, _vocab_map, _embeddings, save_dir, freq_threshold=5, **kwargs):
         """
         Disambiguate word senses through clustering their transformer embeddings
         Clustering is done using the selected sklearn algorithm.
@@ -210,20 +210,26 @@ class WordSenseModel:
         :param _sentences:      List of corpus sentences
         :param _vocab_map:      Dictionary that stores coordinates of every occurrence of each word
         :param _embeddings:     Embeddings for all words in corpus
+        :param save_dir:        Directory to save disambiguated senses
         :param freq_threshold:  Frequency threshold for a word to be disambiguated
         :param kwargs:          Clustering parameters
         """
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
         # Init clustering object
         k = kwargs.get('k', 10)  # 10 is default value, if no kwargs were passed
+        freq_threshold = max(freq_threshold, k)
         estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
         # estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.1, eps=0.1)
         # estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=4, eps=0.3)
 
         # Loop for each word in vocabulary
         for word, instances in _vocab_map.items():
-            if len(instances < freq_threshold):  # Don't disambiguate if word is uncommon
-                pass
+            if len(instances) < freq_threshold:  # Don't disambiguate if word is uncommon
+                continue
 
+            print(f'Disambiguating word \"{word}\"...')
             curr_embeddings = []
             # Build embeddings list for this word
             for instance in instances:
@@ -235,11 +241,12 @@ class WordSenseModel:
             print(f"Num clusters: {num_clusters}")
 
             # Write disambiguated senses to file, with some sentence examples
-            with open(word + "_KMeans_" + str(k) + ".disamb", "w") as fo:
+            with open(save_dir + '/' + word + "_KMeans_" + str(k) + ".disamb", "w") as fo:
                 for i in range(num_clusters):
                     print(f"Cluster #{i}:")
                     fo.write(f"Cluster #{i}:\n[")
-                    sense_members = instances[estimator.labels_ == i]
+                    sense_members = np.array(instances)[estimator.labels_ == i]
+                    print(sense_members)
                     np.savetxt(fo, sense_members, fmt="%s", newline=", ")
                     fo.write(']\n')
                     # Write at most 3 sentence examples for the word sense
@@ -256,10 +263,10 @@ if __name__ == '__main__':
     parser.add_argument('--no_cuda', action='store_false', help='Use GPU?')
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--corpus', type=str, required=True, help='Training Corpus')
-    parser.add_argument('--start_k', type=int, default=1, help='First number of clusters to use')
-    parser.add_argument('--end_k', type=int, default=1, help='Final number of clusters to use')
+    parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use')
+    parser.add_argument('--end_k', type=int, default=10, help='Final number of clusters to use')
     parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
-    parser.add_argument('--embeddings_file', type=str, help='Where to save the data')
+    parser.add_argument('--save_to', type=str, help='Directory to save disambiguated words')
     parser.add_argument('--pickle_file', type=str, help='Pickle file of Bert Embeddings/Save Embeddings to file')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
@@ -290,5 +297,4 @@ if __name__ == '__main__':
     sentences, vocab_map, embeddings = WSD.load_embeddings(args.pickle_file, args.corpus)
 
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        save_to = args.embeddings_file[:-4] + "_" + str(nn) + args.embeddings_file[-4:]
-        WSD.disambiguate(sentences, vocab_map, embeddings, nn)
+        WSD.disambiguate(sentences, vocab_map, embeddings, args.save_to, nn)
