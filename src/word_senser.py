@@ -16,13 +16,13 @@ warnings.filterwarnings('ignore')
 
 class BERT:
 
-    def __init__(self, device_number='cuda:2', use_cuda=True):
+    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
         self.device_number = device_number
         self.use_cuda = use_cuda
 
-        self.tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
 
-        self.model = BertModel.from_pretrained('bert-large-uncased', output_hidden_states=True)
+        self.model = BertModel.from_pretrained(pretrained_model, output_hidden_states=True)
         self.model.eval()
 
         if use_cuda:
@@ -31,12 +31,12 @@ class BERT:
 
 class WordSenseModel:
 
-    def __init__(self, device_number='cuda:2', use_cuda=True):
+    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
 
         self.device_number = device_number
         self.use_cuda = use_cuda
 
-        self.Bert_Model = BERT(device_number, use_cuda)
+        self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
 
     def open_xml_file(self, file_name):
 
@@ -119,34 +119,41 @@ class WordSenseModel:
         return _final_layer
 
     def load_embeddings(self, pickle_file_name, corpus_file):
-
+        """
+        First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
+        This method:
+          a) Stores sentences as an array.
+          b) Creates dictionary where each vocabulary word is mapped to its occurrences in corpus.
+          c) Calculates embeddings for each vocabulary word.
+        :param pickle_file_name:
+        :param corpus_file:
+        :return: sentences, vocab_map, embeddings
+        """
         try:
 
             with open(pickle_file_name, 'rb') as h:
-                # _z = pickle.load(h)
-                _x, _y = pickle.load(h)
-                # _x, _y = _z
+                _x, _y, _z = pickle.load(h)
 
                 print("EMBEDDINGS FOUND!")
-                return _x, _y
+                return _x, _y, _z
 
         except:
 
             print("Embedding File Not Found!! \n")
-            print("Calculating embeddings...")
+            print("Performing first pass...")
 
-            _x, _y = self.calculate_embeddings(corpus_file=corpus_file)
+            _x, _y, _z = self.calculate_embeddings(corpus_file=corpus_file)
 
             with open(pickle_file_name, 'wb') as h:
-                pickle.dump((_x, _y), h)
+                pickle.dump((_x, _y, _z), h)
 
-            print("Embeddings Saved to " + pickle_file_name)
+            print("Data stored in " + pickle_file_name)
 
-            return _x, _y
+            return _x, _y, _z
 
     def calculate_embeddings(self, corpus_file):
         """
-        Finds BERT data for all words in train_file, and writes them to file
+        Finds BERT data for all words in corpus_file, and writes them to file
         :param corpus_file:     file to obtain vocabulary from
         :return: data:    data for the words in corpus_file
         """
@@ -225,6 +232,7 @@ if __name__ == '__main__':
     parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
     parser.add_argument('--embeddings_file', type=str, help='Where to save the data')
     parser.add_argument('--pickle_file', type=str, help='Pickle file of Bert Embeddings/Save Embeddings to file')
+    parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
 
     args = parser.parse_args()
@@ -246,11 +254,11 @@ if __name__ == '__main__':
 
     print("Loading WSD Model!")
 
-    WSD = WordSenseModel(device_number=args.device, use_cuda=args.no_cuda)
+    WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.no_cuda)
 
     print("Loaded WSD Model!")
 
-    embeddings, labels = WSD.load_embeddings(args.pickle_file, args.corpus)
+    embeddings, labels = WSD.first_pass(args.pickle_file, args.corpus)
 
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
         save_to = args.embeddings_file[:-4] + "_" + str(nn) + args.embeddings_file[-4:]
