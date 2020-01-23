@@ -1,3 +1,4 @@
+import pickle
 import xml.etree.ElementTree as ET
 import torch
 import argparse
@@ -113,12 +114,37 @@ class WordSenseModel:
 
             else:
                 _final_layer = _e2[0].numpy()
-                _final_layer = np.around(_final_layer, decimals=4)  # LOWER PRECISION, process faster. CHECK if good!!
+                _final_layer = np.around(_final_layer, decimals=5)  # LOWER PRECISION, process faster. CHECK if good!!
 
         return _final_layer
 
-    def get_embeddings(self,
-                       corpus_file):
+    def load_embeddings(self, pickle_file_name, corpus_file):
+
+        try:
+
+            with open(pickle_file_name, 'rb') as h:
+                # _z = pickle.load(h)
+                _x, _y = pickle.load(h)
+                # _x, _y = _z
+
+                print("EMBEDDINGS FOUND!")
+                return _x, _y
+
+        except:
+
+            print("Embedding File Not Found!! \n")
+            print("Calculating embeddings...")
+
+            _x, _y = WSD.calculate_embeddings(corpus_file=corpus_file)
+
+            with open(pickle_file_name, 'wb') as h:
+                pickle.dump((_x, _y), h)
+
+            print("Embeddings Saved to " + pickle_file_name)
+
+            return _x, _y
+
+    def calculate_embeddings(self, corpus_file):
         """
         Finds BERT data for all words in train_file, and writes them to file
         :param corpus_file:     file to obtain vocabulary from
@@ -166,6 +192,7 @@ class WordSenseModel:
         estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
         # estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.1, eps=0.1)
         # estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=4, eps=0.3)
+        data = np.float32(data)
         estimator.fit(data)
         print(estimator.labels_)
         num_clusters = max(estimator.labels_) + 1
@@ -185,6 +212,7 @@ class WordSenseModel:
 
         print(f"Num clusters: {num_clusters}")
 
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='WSD using BERT')
@@ -196,6 +224,7 @@ if __name__ == '__main__':
     parser.add_argument('--end_k', type=int, default=1, help='Final number of clusters to use')
     parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
     parser.add_argument('--embeddings_file', type=str, help='Where to save the data')
+    parser.add_argument('--pickle_file', type=str, help='Pickle file of Bert Embeddings/Save Embeddings to file')
     parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
 
     args = parser.parse_args()
@@ -221,7 +250,8 @@ if __name__ == '__main__':
 
     print("Loaded WSD Model!")
 
+    embeddings, labels = WSD.load_embeddings(args.pickle_file, args.corpus)
+
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        embeddings, labels = WSD.get_embeddings(corpus_file=args.corpus)
         save_to = args.embeddings_file[:-4] + "_" + str(nn) + args.embeddings_file[-4:]
         WSD.cluster_embeddings(embeddings, labels, save_to, nn)
