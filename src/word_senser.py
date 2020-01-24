@@ -245,9 +245,10 @@ class WordSenseModel:
                 for i in range(num_clusters):
                     print(f"Cluster #{i}:")
                     fo.write(f"Cluster #{i}:\n[")
-                    sense_members = np.array(instances)[estimator.labels_ == i]
+                    # sense_members = instances[estimator.labels_ == i]
+                    sense_members = [instances[j] for j, k in enumerate(estimator.labels_) if k == i]
                     print(sense_members)
-                    np.savetxt(fo, sense_members, fmt="%s", newline=", ")
+                    np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
                     fo.write(']\n')
                     # Write at most 3 sentence examples for the word sense
                     sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
