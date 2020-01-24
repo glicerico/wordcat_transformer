@@ -164,12 +164,12 @@ class WordSenseModel:
 
         embeddings_count = 0
         all_embeddings = []  # Store each sent_embeddings as elements
-        sent_embeddings = []  # Store one sentence's word embeddings as elements
         _sentences = []  # Store textual sentences
         _vocab_map = {}  # Store occurrences of each word in corpus
 
         # Process each sentence in corpus
         for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
+            sent_embeddings = []  # Store one sentence's word embeddings as elements
 
             sent, sent1, senses = self.semeval_sent_sense_collect(i)
             _sentences.append(sent1)
@@ -202,7 +202,7 @@ class WordSenseModel:
         return _sentences, _vocab_map, all_embeddings
 
     @staticmethod
-    def disambiguate(_sentences, _vocab_map, _embeddings, save_dir, freq_threshold=5, **kwargs):
+    def disambiguate(_sentences, _vocab_map, _embeddings, save_dir, freq_threshold=1, **kwargs):
         """
         Disambiguate word senses through clustering their transformer embeddings
         Clustering is done using the selected sklearn algorithm.
@@ -296,5 +296,6 @@ if __name__ == '__main__':
 
     sentences, vocab_map, embeddings = WSD.load_embeddings(args.pickle_file, args.corpus)
 
+    print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(sentences, vocab_map, embeddings, args.save_to, nn)
+        WSD.disambiguate(sentences, vocab_map, embeddings, args.save_to, k=nn)
