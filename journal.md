@@ -73,3 +73,25 @@ using the following steps:
    gather all its embeddings.
    2) Cluster such embeddings to obtain word senses.
    
+*******************
+
+There's a working implementation of WSD in word_senser.py
+
+After experimenting with 
+[senseval2_lexical_sample_train](../UFSAC/corpus/ufsac-public-2.1/senseval2_lexical_sample_test.xml), 
+I notice that memory consumption is quite large using
+the concatenation of the last 4 hidden states.
+In order to keep testing in my laptop, I change to using only the 4th to last
+hidden layer.
+TODO: Switch to the average of the last 4 layers, since that is the second
+best result obtained by Devlin et al. (2019).
+
+I confirm that using KMeans, which requires a fixed number of clusters,
+spreads similar meanings to different clusters.
+However, the division is not bad for the actual ambiguous terms, 
+and "saw" and "bank" are properly disambiguated in this case.
+TODO: However, it's a good idea to try some agglomerative methods.
+
+
+TODO: convert variables to class variables
+
