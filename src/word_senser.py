@@ -109,7 +109,8 @@ class WordSenseModel:
 
             _e1 = _encoded_layers[-4:]
 
-            _e2 = torch.cat((_e1[0], _e1[1], _e1[2], _e1[3]), 2)
+            # _e2 = torch.cat((_e1[0], _e1[1], _e1[2], _e1[3]), 2)
+            _e2 = _e1[0]
 
             if self.use_cuda:
                 _final_layer = _e2[0].cpu().numpy()
@@ -243,11 +244,9 @@ class WordSenseModel:
             # Write disambiguated senses to file, with some sentence examples
             with open(save_dir + '/' + word + "_KMeans_" + str(k) + ".disamb", "w") as fo:
                 for i in range(num_clusters):
-                    print(f"Cluster #{i}:")
                     fo.write(f"Cluster #{i}:\n[")
                     # sense_members = instances[estimator.labels_ == i]
                     sense_members = [instances[j] for j, k in enumerate(estimator.labels_) if k == i]
-                    print(sense_members)
                     np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
                     fo.write(']\n')
                     # Write at most 3 sentence examples for the word sense
@@ -299,4 +298,4 @@ if __name__ == '__main__':
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(sentences, vocab_map, embeddings, args.save_to, k=nn)
+        WSD.disambiguate(sentences, vocab_map, embeddings, args.save_to, freq_threshold=5, k=nn)
