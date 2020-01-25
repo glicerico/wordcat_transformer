@@ -7,10 +7,9 @@ import numpy as np
 import random as rand
 
 from transformers import BertTokenizer, BertModel
-from sklearn.cluster import KMeans
-from sklearn.cluster import OPTICS, DBSCAN
+from sklearn.cluster import KMeans, OPTICS, DBSCAN
 
-from tqdm import tqdm, trange
+from tqdm import tqdm
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -34,6 +33,10 @@ class BERT:
 class WordSenseModel:
 
     def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
+
+        self.sentences = []  # List of corpus textual sentences
+        self.vocab_map = {}  # Dictionary that stores coordinates of every occurrence of each word
+        self.embeddings = []  # Embeddings for all words in corpus
 
         self.device_number = device_number
         self.use_cuda = use_cuda
@@ -128,52 +131,48 @@ class WordSenseModel:
           a) Stores sentences as an array.
           b) Creates dictionary where each vocabulary word is mapped to its occurrences in corpus.
           c) Calculates embeddings for each vocabulary word.
-        :param pickle_file_name:
-        :param corpus_file:
-        :return: sentences, vocab_map, embeddings
+        :param pickle_file_name
+        :param corpus_file
         """
         try:
 
             with open(pickle_file_name, 'rb') as h:
-                _x, _y, _z = pickle.load(h)
+                _data = pickle.load(h)
+                self.sentences = _data[0]
+                self.vocab_map = _data[1]
+                self.embeddings = _data[2]
 
                 print("EMBEDDINGS FOUND!")
-                return _x, _y, _z
 
         except:
 
             print("Embedding File Not Found!! \n")
             print("Performing first pass...")
 
-            _x, _y, _z = self.calculate_embeddings(corpus_file=corpus_file)
+            self.calculate_embeddings(corpus_file=corpus_file)
 
             with open(pickle_file_name, 'wb') as h:
-                pickle.dump((_x, _y, _z), h)
+                _data = (self.sentences, self.vocab_map, self.embeddings)
+                pickle.dump(_data, h)
 
             print("Data stored in " + pickle_file_name)
-
-            return _x, _y, _z
 
     def calculate_embeddings(self, corpus_file):
         """
         Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
         :param corpus_file:     file to obtain vocabulary from
-        :return:                sentences, vocab_map, embeddings
         """
 
         _test_root, _test_tree = self.open_xml_file(corpus_file)
 
         embeddings_count = 0
-        all_embeddings = []  # Store each sent_embeddings as elements
-        _sentences = []  # Store textual sentences
-        _vocab_map = {}  # Store occurrences of each word in corpus
 
         # Process each sentence in corpus
         for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
             sent_embeddings = []  # Store one sentence's word embeddings as elements
 
-            sent, sent1, senses = self.semeval_sent_sense_collect(i)
-            _sentences.append(sent1)
+            sent, sent1, _ = self.semeval_sent_sense_collect(i)
+            self.sentences.append(sent1)
 
             bert_tokens = self.collect_bert_tokens(sent)
 
@@ -182,12 +181,12 @@ class WordSenseModel:
             token_count = 1
 
             # Process all words in sentence
-            for word_pos, j in enumerate(zip(senses, sent)):
-                word = j[1]
+            for word_pos, j in enumerate(sent):
+                word = j
                 # Register word location in vocabulary dictionary
-                if word not in _vocab_map.keys():
-                    _vocab_map[word] = []
-                _vocab_map[word].append((sent_nbr, word_pos))
+                if word not in self.vocab_map.keys():
+                    self.vocab_map[word] = []
+                self.vocab_map[word].append((sent_nbr, word_pos))
 
                 embedding = np.mean(final_layer[token_count:token_count + len(self.apply_bert_tokenizer(word))], 0)
                 sent_embeddings.append(np.float32(embedding))  # Lower precision for speed
@@ -196,21 +195,15 @@ class WordSenseModel:
                 embeddings_count += 1
 
             # Store this sentence embeddings in the general list
-            all_embeddings.append(sent_embeddings)
+            self.embeddings.append(sent_embeddings)
 
         print(f"{embeddings_count} EMBEDDINGS GENERATED")
 
-        return _sentences, _vocab_map, all_embeddings
-
-    @staticmethod
-    def disambiguate(_sentences, _vocab_map, _embeddings, save_dir, freq_threshold=5, **kwargs):
+    def disambiguate(self, save_dir, freq_threshold=5, **kwargs):
         """
         Disambiguate word senses through clustering their transformer embeddings
         Clustering is done using the selected sklearn algorithm.
 
-        :param _sentences:      List of corpus sentences
-        :param _vocab_map:      Dictionary that stores coordinates of every occurrence of each word
-        :param _embeddings:     Embeddings for all words in corpus
         :param save_dir:        Directory to save disambiguated senses
         :param freq_threshold:  Frequency threshold for a word to be disambiguated
         :param kwargs:          Clustering parameters
@@ -223,13 +216,13 @@ class WordSenseModel:
         freq_threshold = max(freq_threshold, k)
         # estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
         # estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.1, eps=0.1)
-        estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.5)
+        estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.3)
 
         fl = open(save_dir + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
 
         # Loop for each word in vocabulary
-        for word, instances in _vocab_map.items():
+        for word, instances in self.vocab_map.items():
             if len(instances) < freq_threshold:  # Don't disambiguate if word is uncommon
                 continue
 
@@ -238,7 +231,7 @@ class WordSenseModel:
             # Build embeddings list for this word
             for instance in instances:
                 x, y = instance  # Get current word instance coordinates
-                curr_embeddings.append(_embeddings[x][y])
+                curr_embeddings.append(self.embeddings[x][y])
 
             estimator.fit(curr_embeddings)  # Disambiguate
             num_clusters = max(estimator.labels_) + 1
@@ -256,13 +249,14 @@ class WordSenseModel:
                         # Write at most 3 sentence examples for the word sense
                         sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
                         fo.write('Samples:\n')
-                        # Write sample sentences to file, with focus word in CAPS
+                        # Write sample sentences to file, with focus word in CAPS for easier reading
                         for sample, focus_word in sent_samples:
-                            bold_sent = _sentences[sample].split()
+                            bold_sent = self.sentences[sample].split()
                             bold_sent[focus_word] = bold_sent[focus_word].upper()
                             fo.write(" ".join(bold_sent) + '\n')
         fl.write("\n")
         fl.close()
+
 
 if __name__ == '__main__':
 
@@ -282,7 +276,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print("Corpus is: " + args.corpus)
-    # print("Number of clusters: " + str(args.end_k))
 
     if args.no_cuda:
         print("Processing with CUDA!")
@@ -302,8 +295,8 @@ if __name__ == '__main__':
 
     print("Loaded WSD Model!")
 
-    sentences, vocab_map, embeddings = WSD.load_embeddings(args.pickle_file, args.corpus)
+    WSD.load_embeddings(args.pickle_file, args.corpus)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(sentences, vocab_map, embeddings, args.save_to, freq_threshold=5, k=nn)
+        WSD.disambiguate(args.save_to, freq_threshold=5, k=nn)
