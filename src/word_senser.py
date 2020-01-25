@@ -7,7 +7,7 @@ import numpy as np
 import random as rand
 
 from transformers import BertTokenizer, BertModel
-from sklearn.cluster import KMeans, OPTICS, DBSCAN
+from sklearn.cluster import KMeans, OPTICS, DBSCAN, cluster_optics_dbscan
 
 from tqdm import tqdm
 import warnings
@@ -199,67 +199,108 @@ class WordSenseModel:
 
         print(f"{embeddings_count} EMBEDDINGS GENERATED")
 
-    def disambiguate(self, save_dir, freq_threshold=5, **kwargs):
+    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, **kwargs):
         """
         Disambiguate word senses through clustering their transformer embeddings
         Clustering is done using the selected sklearn algorithm.
+        If OPTICS method is used, then DBSCAN clusters are also obtained
 
         :param save_dir:        Directory to save disambiguated senses
+        :param clust_method:    Clustering method used
         :param freq_threshold:  Frequency threshold for a word to be disambiguated
         :param kwargs:          Clustering parameters
         """
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
 
-        # Init clustering object
-        k = kwargs.get('k', 10)  # 10 is default value, if no kwargs were passed
-        freq_threshold = max(freq_threshold, k)
+        # k = kwargs.get('k', 10)  # 10 is default value, if no kwargs were passed
+        # freq_threshold = max(freq_threshold, k)
         # estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
-        estimator = OPTICS(min_samples=0.1, metric='cosine', n_jobs=4, max_eps=0.1)
         # estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.3)
 
-        # Use OPTICS estimator to get DBSCAN clusters
-        if clust_method = 'OPTICS':
+        # Use OPTICS estimator also to get DBSCAN clusters
+        if clust_method == 'OPTICS':
+            min_samples = kwargs.get('min_samples', 0.3)  # at least 30% of instances in a sense
+            max_eps = kwargs.get('max_eps', 0.4)  # max distance to be neighbors
 
-    def cluster(self, save_to, estimator, freq_threshold, **kwargs):
-        fl = open(save_dir + "/clustering.log", 'w')  # Logging file
-        fl.write(f"# WORD\t\tCLUSTERS\n")
-        # Loop for each word in vocabulary
-        for word, instances in self.vocab_map.items():
-            if len(instances) < freq_threshold:  # Don't disambiguate if word is uncommon
-                continue
+            # Init clustering object
+            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4, max_eps=max_eps)
+            save_to = save_dir + "_OPTICS_minsamp" + str(min_samples) + "_maxeps" + str(max_eps)
+            if not os.path.exists(save_to):
+                os.makedirs(save_to)
+            fl = open(save_to + "/clustering.log", 'w')  # Logging file
+            fl.write(f"# WORD\t\tCLUSTERS\n")
 
-            print(f'Disambiguating word \"{word}\"...')
-            curr_embeddings = []
-            # Build embeddings list for this word
-            for instance in instances:
-                x, y = instance  # Get current word instance coordinates
-                curr_embeddings.append(self.embeddings[x][y])
+            # directory and files setup for dbscan clustering
+            eps_dbscan = np.linspace(0.1, max_eps, round(max_eps / 0.1))  # eps intervals to use in dbscan
+            fl_dbscan = []
+            save_dbscan = []
+            for eps_val in eps_dbscan:
+                this_save = save_to + "/DBSCAN_eps" + str(eps_val)
+                if not os.path.exists(this_save):
+                    os.makedirs(this_save)
+                save_dbscan.append(this_save)
+                fl_dbscan.append(open(this_save + "/clustering.log", 'w'))
 
-            estimator.fit(curr_embeddings)  # Disambiguate
+            # Loop for each word in vocabulary
+            for word, instances in self.vocab_map.items():
+                if len(instances) < freq_threshold:  # Don't disambiguate if word is uncommon
+                    print(f"Word \"{word}\" frequency out of threshold")
+                    continue
+                else:
+                    print(f'Disambiguating word \"{word}\"...')
 
-            num_clusters = max(estimator.labels_) + 1
-            print(f"Num clusters: {num_clusters}")
-            fl.write(f"{word}\t\t{num_clusters}\n")
+                # Build embeddings list for this word
+                curr_embeddings = []
+                for instance in instances:
+                    x, y = instance  # Get current word instance coordinates
+                    curr_embeddings.append(self.embeddings[x][y])
 
-            # If disambiguated, write senses to file, with some sentence examples
-            if num_clusters > 1:
-                with open(save_dir + '/' + word + ".disamb", "w") as fo:
-                    for i in range(num_clusters):
-                        fo.write(f"Cluster #{i}:\n[")
-                        sense_members = [instances[j] for j, k in enumerate(estimator.labels_) if k == i]
-                        np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
-                        fo.write(']\n')
-                        # Write at most 3 sentence examples for the word sense
-                        sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
-                        fo.write('Samples:\n')
-                        # Write sample sentences to file, with focus word in CAPS for easier reading
-                        for sample, focus_word in sent_samples:
-                            bold_sent = self.sentences[sample].split()
-                            bold_sent[focus_word] = bold_sent[focus_word].upper()
-                            fo.write(" ".join(bold_sent) + '\n')
-        fl.write("\n")
-        fl.close()
+                estimator.fit(curr_embeddings)  # Disambiguate
+                self.write_clusters(fl, save_to, word, estimator.labels_)
+
+                # Use OPTICS estimator to do DBSCAN in range of eps values
+                for eps_val, this_fl, this_save in zip(eps_dbscan, fl_dbscan, save_dbscan):
+                    this_labels = cluster_optics_dbscan(reachability=estimator.reachability_,
+                                                        core_distances=estimator.core_distances_,
+                                                        ordering=estimator.ordering_, eps=eps_val)
+                    self.write_clusters(this_fl, this_save, word, this_labels)
+
+            for this_fl in fl_dbscan:
+                this_fl.write("\n")
+                this_fl.close()
+
+            fl.write("\n")
+            fl.close()
+
+    def write_clusters(self, fl, save_dir, word, labels):
+        """
+        Perform the clustering and writing results to file
+        :param fl:              handle for logging file
+        :param save_dir:        Directory to save disambiguated senses
+        :param word:            Current word to disambiguate
+        :param labels:          Cluster labels for each word instance
+        """
+
+        num_clusters = max(labels) + 1
+        print(f"Num clusters: {num_clusters}")
+        fl.write(f"{word}\t\t{num_clusters}\n")
+
+        # If disambiguated, write senses to file, with some sentence examples
+        if num_clusters > 1:
+            with open(save_dir + '/' + word + ".disamb", "w") as fo:
+                for i in range(num_clusters):
+                    fo.write(f"Cluster #{i}:\n[")
+                    sense_members = [self.vocab_map[word][j] for j, k in enumerate(labels) if k == i]
+                    np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
+                    fo.write(']\n')
+                    # Write at most 3 sentence examples for the word sense
+                    sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
+                    fo.write('Samples:\n')
+                    # Write sample sentences to file, with focus word in CAPS for easier reading
+                    for sample, focus_word in sent_samples:
+                        bold_sent = self.sentences[sample].split()
+                        bold_sent[focus_word] = bold_sent[focus_word].upper()
+                        fo.write(" ".join(bold_sent) + '\n')
+
 
 if __name__ == '__main__':
 
@@ -271,7 +312,7 @@ if __name__ == '__main__':
     parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use')
     parser.add_argument('--end_k', type=int, default=10, help='Final number of clusters to use')
     parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
-    parser.add_argument('--save_to', type=str, required='test', help='Directory to save disambiguated words')
+    parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
