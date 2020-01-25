@@ -225,8 +225,8 @@ class WordSenseModel:
         # estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.1, eps=0.1)
         estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.5)
 
-        fl = open("clustering.log", 'w')  # Logging file
-        fl.write(f"# WORD\t\tCLUSTERS")
+        fl = open(save_dir + "/clustering.log", 'w')  # Logging file
+        fl.write(f"# WORD\t\tCLUSTERS\n")
 
         # Loop for each word in vocabulary
         for word, instances in _vocab_map.items():
@@ -243,22 +243,25 @@ class WordSenseModel:
             estimator.fit(curr_embeddings)  # Disambiguate
             num_clusters = max(estimator.labels_) + 1
             print(f"Num clusters: {num_clusters}")
-            fl.write(f"{word}\t\t{num_clusters}")
+            fl.write(f"{word}\t\t{num_clusters}\n")
 
             # If disambiguated, write senses to file, with some sentence examples
             if num_clusters > 1:
-                with open(save_dir + '/' + word + "_KMeans_" + str(k) + ".disamb", "w") as fo:
+                with open(save_dir + '/' + word + ".disamb", "w") as fo:
                     for i in range(num_clusters):
                         fo.write(f"Cluster #{i}:\n[")
-                        # sense_members = instances[estimator.labels_ == i]
                         sense_members = [instances[j] for j, k in enumerate(estimator.labels_) if k == i]
                         np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
                         fo.write(']\n')
                         # Write at most 3 sentence examples for the word sense
                         sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
                         fo.write('Samples:\n')
-                        for sample, _ in sent_samples:
-                            fo.write(_sentences[sample] + '\n')
+                        # Write sample sentences to file, with focus word in CAPS
+                        for sample, focus_word in sent_samples:
+                            bold_sent = _sentences[sample].split()
+                            bold_sent[focus_word] = bold_sent[focus_word].upper()
+                            fo.write(" ".join(bold_sent) + '\n')
+        fl.write("\n")
         fl.close()
 
 if __name__ == '__main__':
