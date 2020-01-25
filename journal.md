@@ -83,15 +83,33 @@ I notice that memory consumption is quite large using
 the concatenation of the last 4 hidden states.
 In order to keep testing in my laptop, I change to using only the 4th to last
 hidden layer.
-TODO: Switch to the average of the last 4 layers, since that is the second
-best result obtained by Devlin et al. (2019).
+~~TODO: Switch to the average of the last 4 layers, since that is the second
+best result obtained by Devlin et al. (2019).~~
 
 I confirm that using KMeans, which requires a fixed number of clusters,
 spreads similar meanings to different clusters.
 However, the division is not bad for the actual ambiguous terms, 
 and "saw" and "bank" are properly disambiguated in this case.
-TODO: However, it's a good idea to try some agglomerative methods.
+~~TODO: However, it's a good idea to try some agglomerative methods.~~
 
+~~TODO: convert variables to class variables~~
 
-TODO: convert variables to class variables
+*******************
+Decided to try sklearn clustering algorithms which don't necessarily cluster
+all words.
 
+Tried DBSCAN with a few different parameters: it's clear that the param
+that decides the minimum distance for a cluster is crucial, so then
+decided to try OPTICS, which allows to use a range for that value, to
+see which gives more reasonable clusters.
+
+One thing noted with DBSCAN is that the clustering is not bad.
+When the appropriate parameters are chosen, words are disambiguated in
+clusters that sometimes portray the same meaning, but one or two clusters
+give a very distinct meaning.
+Very little overlap between meanings was observed in the same clusters.
+
+Parameters decided for OPTICS method:
+- min_samples: 0.1 (10% of all occurrences of a word are the min to define 
+a cluster)
+- metric: cosine

@@ -215,12 +215,15 @@ class WordSenseModel:
         k = kwargs.get('k', 10)  # 10 is default value, if no kwargs were passed
         freq_threshold = max(freq_threshold, k)
         # estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
-        # estimator = OPTICS(min_samples=3, cluster_method='dbscan', metric='cosine', max_eps=0.1, eps=0.1)
-        estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.3)
+        estimator = OPTICS(min_samples=0.1, metric='cosine', n_jobs=4, max_eps=0.1)
+        # estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.3)
 
+        # Use OPTICS estimator to get DBSCAN clusters
+        if clust_method = 'OPTICS':
+
+    def cluster(self, save_to, estimator, freq_threshold, **kwargs):
         fl = open(save_dir + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
-
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             if len(instances) < freq_threshold:  # Don't disambiguate if word is uncommon
@@ -234,6 +237,7 @@ class WordSenseModel:
                 curr_embeddings.append(self.embeddings[x][y])
 
             estimator.fit(curr_embeddings)  # Disambiguate
+
             num_clusters = max(estimator.labels_) + 1
             print(f"Num clusters: {num_clusters}")
             fl.write(f"{word}\t\t{num_clusters}\n")
@@ -257,7 +261,6 @@ class WordSenseModel:
         fl.write("\n")
         fl.close()
 
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='WSD using BERT')
@@ -268,10 +271,11 @@ if __name__ == '__main__':
     parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use')
     parser.add_argument('--end_k', type=int, default=10, help='Final number of clusters to use')
     parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
-    parser.add_argument('--save_to', type=str, help='Directory to save disambiguated words')
-    parser.add_argument('--pickle_file', type=str, help='Pickle file of Bert Embeddings/Save Embeddings to file')
+    parser.add_argument('--save_to', type=str, required='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
+    parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
+                                                                               'Embeddings to file')
 
     args = parser.parse_args()
 
