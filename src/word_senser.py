@@ -107,16 +107,16 @@ class WordSenseModel:
 
             _, _, _encoded_layers = self.Bert_Model.model(_t1, token_type_ids=_t2)
 
+            # Average last 4 hidden layers (second best result from Devlin et al. 2019)
             _e1 = _encoded_layers[-4:]
-
-            # _e2 = torch.cat((_e1[0], _e1[1], _e1[2], _e1[3]), 2)
-            _e2 = _e1[0]
+            _e2 = torch.cat((_e1[0], _e1[1], _e1[2], _e1[3]), 0)
+            _e3 = torch.mean(_e2, dim=0)
 
             if self.use_cuda:
-                _final_layer = _e2[0].cpu().numpy()
+                _final_layer = _e3[0].cpu().numpy()
 
             else:
-                _final_layer = _e2[0].numpy()
+                _final_layer = _e3[0].numpy()
                 _final_layer = np.around(_final_layer, decimals=5)  # LOWER PRECISION, process faster. CHECK if good!!
 
         return _final_layer
