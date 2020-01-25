@@ -113,10 +113,10 @@ class WordSenseModel:
             _e3 = torch.mean(_e2, dim=0)
 
             if self.use_cuda:
-                _final_layer = _e3[0].cpu().numpy()
+                _final_layer = _e3.cpu().numpy()
 
             else:
-                _final_layer = _e3[0].numpy()
+                _final_layer = _e3.numpy()
                 _final_layer = np.around(_final_layer, decimals=5)  # LOWER PRECISION, process faster. CHECK if good!!
 
         return _final_layer
