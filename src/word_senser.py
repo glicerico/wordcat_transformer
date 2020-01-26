@@ -43,14 +43,16 @@ class WordSenseModel:
 
         self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
 
-    def open_xml_file(self, file_name):
+    @staticmethod
+    def open_xml_file(file_name):
 
         tree = ET.parse(file_name)
         root = tree.getroot()
 
         return root, tree
 
-    def semeval_sent_sense_collect(self, xml_struct):
+    @staticmethod
+    def semeval_sent_sense_collect(xml_struct):
 
         _sent = []
         _sent1 = ""
@@ -171,7 +173,7 @@ class WordSenseModel:
         for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
             sent_embeddings = []  # Store one sentence's word embeddings as elements
 
-            sent, sent1, _ = self.semeval_sent_sense_collect(i)
+            sent, sent1, senses = self.semeval_sent_sense_collect(i)
             self.sentences.append(sent1)
 
             bert_tokens = self.collect_bert_tokens(sent)
@@ -218,8 +220,8 @@ class WordSenseModel:
 
         # Use OPTICS estimator also to get DBSCAN clusters
         if clust_method == 'OPTICS':
-            min_samples = kwargs.get('min_samples', 0.3)  # at least 30% of instances in a sense
-            max_eps = kwargs.get('max_eps', 0.4)  # max distance to be neighbors
+            min_samples = kwargs.get('min_samples', 0.2)  # at least 20% of instances in a sense
+            max_eps = kwargs.get('max_eps', 0.5)  # max distance to be neighbors
 
             # Init clustering object
             estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4, max_eps=max_eps)
@@ -234,7 +236,7 @@ class WordSenseModel:
             fl_dbscan = []
             save_dbscan = []
             for eps_val in eps_dbscan:
-                this_save = save_to + "/DBSCAN_eps" + str(eps_val)
+                this_save = save_to + f"/DBSCAN_eps{eps_val:02}"  # FIX: Format doesn't work
                 if not os.path.exists(this_save):
                     os.makedirs(this_save)
                 save_dbscan.append(this_save)
@@ -344,4 +346,4 @@ if __name__ == '__main__':
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(args.save_to, freq_threshold=5, k=nn)
+        WSD.disambiguate(args.save_to, freq_threshold=5)
