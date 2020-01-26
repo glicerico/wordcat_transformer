@@ -169,6 +169,9 @@ class WordSenseModel:
 
         embeddings_count = 0
 
+        fk = open(corpus_file[:-3] + 'key', 'w')  # Key to GOLD word senses
+        instance = 0  # Useless counter needed for evaluator
+
         # Process each sentence in corpus
         for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
             sent_embeddings = []  # Store one sentence's word embeddings as elements
@@ -183,8 +186,15 @@ class WordSenseModel:
             token_count = 1
 
             # Process all words in sentence
-            for word_pos, j in enumerate(sent):
-                word = j
+            for word_pos, j in enumerate(zip(sent, senses)):
+                word = j[0]
+                sense = j[1]
+
+                # Save GOLD sense
+                if sense != 0:
+                    fk.write(f"{word}\t{instance}\t{sense}\n")
+                    instance += 1
+
                 # Register word location in vocabulary dictionary
                 if word not in self.vocab_map.keys():
                     self.vocab_map[word] = []
@@ -199,6 +209,7 @@ class WordSenseModel:
             # Store this sentence embeddings in the general list
             self.embeddings.append(sent_embeddings)
 
+        fk.close()
         print(f"{embeddings_count} EMBEDDINGS GENERATED")
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, **kwargs):
