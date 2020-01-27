@@ -113,3 +113,9 @@ Parameters decided for OPTICS method:
 - min_samples: 0.1 (10% of all occurrences of a word are the min to define 
 a cluster)
 - metric: cosine
+ 
+ ******
+ Decided to output WSD results in format to evaluate with AdaGram's
+ evaluator against GOLD standard.
+ This will help guide the parameters to use for clustering.
+ Tune parameters with training data, evaluate against test data.
