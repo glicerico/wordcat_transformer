@@ -37,6 +37,7 @@ class WordSenseModel:
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary that stores coordinates of every occurrence of each word
         self.embeddings = []  # Embeddings for all words in corpus
+        self.ambiguous_gold = []  # Words that are ambiguous in GOLD standard
 
         self.device_number = device_number
         self.use_cuda = use_cuda
@@ -51,8 +52,7 @@ class WordSenseModel:
 
         return root, tree
 
-    @staticmethod
-    def semeval_sent_sense_collect(xml_struct):
+    def semeval_sent_sense_collect(self, xml_struct):
 
         _sent = []
         _sent1 = ""
@@ -73,6 +73,7 @@ class WordSenseModel:
                 if 'wn30_key' in _temp_dict:
 
                     _senses.extend([_temp_dict['wn30_key']] * len([words]))
+                    self.ambiguous_gold.extend([words])
 
                 else:
                     _senses.extend([0] * len([words]))
@@ -170,7 +171,7 @@ class WordSenseModel:
         embeddings_count = 0
 
         fk = open(corpus_file[:-3] + 'key', 'w')  # Key to GOLD word senses
-        instance = 0  # Useless counter needed for evaluator
+        inst_counter = 0  # Useless instance counter needed for evaluator
 
         # Process each sentence in corpus
         for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
@@ -192,8 +193,8 @@ class WordSenseModel:
 
                 # Save GOLD sense
                 if sense != 0:
-                    fk.write(f"{word}\t{instance}\t{sense}\n")
-                    instance += 1
+                    fk.write(f"{word} {inst_counter} {sense}\n")
+                    inst_counter += 1
 
                 # Register word location in vocabulary dictionary
                 if word not in self.vocab_map.keys():
@@ -231,8 +232,8 @@ class WordSenseModel:
 
         # Use OPTICS estimator also to get DBSCAN clusters
         if clust_method == 'OPTICS':
-            min_samples = kwargs.get('min_samples', 0.2)  # at least 20% of instances in a sense
-            max_eps = kwargs.get('max_eps', 0.5)  # max distance to be neighbors
+            min_samples = kwargs.get('min_samples', 0.1)  # at least 10% of instances in a sense
+            max_eps = kwargs.get('max_eps', 0.4)  # max distance to be neighbors
 
             # Init clustering object
             estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4, max_eps=max_eps)
@@ -241,10 +242,12 @@ class WordSenseModel:
                 os.makedirs(save_to)
             fl = open(save_to + "/clustering.log", 'w')  # Logging file
             fl.write(f"# WORD\t\tCLUSTERS\n")
+            fk = open(save_to + "/disamb.pred", 'w')  # Predictions for evaluation against GOLD
 
             # directory and files setup for dbscan clustering
             eps_dbscan = np.linspace(0.1, max_eps, round(max_eps / 0.1))  # eps intervals to use in dbscan
             fl_dbscan = []
+            fk_dbscan = []
             save_dbscan = []
             for eps_val in eps_dbscan:
                 this_save = save_to + f"/DBSCAN_eps{eps_val:02}"  # FIX: Format doesn't work
@@ -252,6 +255,7 @@ class WordSenseModel:
                     os.makedirs(this_save)
                 save_dbscan.append(this_save)
                 fl_dbscan.append(open(this_save + "/clustering.log", 'w'))
+                fk_dbscan.append(open(this_save + "/disamb.pred", 'w'))
 
             # Loop for each word in vocabulary
             for word, instances in self.vocab_map.items():
@@ -267,22 +271,31 @@ class WordSenseModel:
                     x, y = instance  # Get current word instance coordinates
                     curr_embeddings.append(self.embeddings[x][y])
 
-                estimator.fit(curr_embeddings)  # Disambiguate
+                estimator.fit(curr_embeddings)  # Disambiguate with OPTICS
                 self.write_clusters(fl, save_to, word, estimator.labels_)
+                self.write_predictions(fk, word, estimator.labels_)
 
                 # Use OPTICS estimator to do DBSCAN in range of eps values
-                for eps_val, this_fl, this_save in zip(eps_dbscan, fl_dbscan, save_dbscan):
+                for eps_val, this_fl, this_fk, this_save in zip(eps_dbscan, fl_dbscan, fk_dbscan, save_dbscan):
                     this_labels = cluster_optics_dbscan(reachability=estimator.reachability_,
                                                         core_distances=estimator.core_distances_,
                                                         ordering=estimator.ordering_, eps=eps_val)
                     self.write_clusters(this_fl, this_save, word, this_labels)
+                    self.write_predictions(this_fk, word, this_labels)
 
-            for this_fl in fl_dbscan:
+            for this_fl, this_fk in zip(fl_dbscan, fk_dbscan):
                 this_fl.write("\n")
                 this_fl.close()
+                this_fk.close()
 
             fl.write("\n")
             fl.close()
+            fk.close()
+
+    def write_predictions(self, fk, word, labels):
+        if word in self.ambiguous_gold:
+            for count, label in enumerate(labels):
+                fk.write(f"{word} {count} {label}\n")
 
     def write_clusters(self, fl, save_dir, word, labels):
         """
