@@ -1,3 +1,6 @@
+# Based on the code by Wiedemann et al. (2019, github.com/uhh-lt/bert-sense), and
+# modified for unsupervised word-sense disambiguation purposes
+
 import os
 import pickle
 import xml.etree.ElementTree as ET
@@ -144,6 +147,7 @@ class WordSenseModel:
                 self.sentences = _data[0]
                 self.vocab_map = _data[1]
                 self.embeddings = _data[2]
+                self.ambiguous_gold = _data[3]
 
                 print("EMBEDDINGS FOUND!")
 
@@ -155,7 +159,7 @@ class WordSenseModel:
             self.calculate_embeddings(corpus_file=corpus_file)
 
             with open(pickle_file_name, 'wb') as h:
-                _data = (self.sentences, self.vocab_map, self.embeddings)
+                _data = (self.sentences, self.vocab_map, self.embeddings, self.ambiguous_gold)
                 pickle.dump(_data, h)
 
             print("Data stored in " + pickle_file_name)
@@ -313,7 +317,7 @@ class WordSenseModel:
         # If disambiguated, write senses to file, with some sentence examples
         if num_clusters > 1:
             with open(save_dir + '/' + word + ".disamb", "w") as fo:
-                for i in range(num_clusters):
+                for i in range(-1, num_clusters):  # Also write unclustered words
                     fo.write(f"Cluster #{i}:\n[")
                     sense_members = [self.vocab_map[word][j] for j, k in enumerate(labels) if k == i]
                     np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
