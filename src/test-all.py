@@ -76,10 +76,9 @@ def compute_metrics(answers, predictions):
     return np.mean(aris),np.mean(vscores)
 
 if __name__ == '__main__':
-    model = sys.argv[1]
+    GS = sys.argv[1]
+    pred = sys.argv[2]
 
-    GS = 'gold.key'  # Gold standard
-    pred = 'pred.key'
     true_answers = read_answers(GS)
     predictions = read_answers(pred)
     compute_metrics(true_answers, predictions)
