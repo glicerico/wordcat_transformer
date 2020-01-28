@@ -67,12 +67,12 @@ def compute_metrics(answers, predictions):
     vscores = np.array(vscores)
     fscores = np.array(fscores)
     weights = np.array(weights)
-    print 'number of one-sense words: %d' % (len(vscores) - len(aris))
-    print 'mean ari: %f' % np.mean(aris)
-    print 'mean vscore: %f' % np.mean(vscores)
-    print 'weighted vscore: %f' % np.sum(vscores * (weights / float(np.sum(weights))))
-    print 'mean fscore: %f' % np.mean(fscores)
-    print 'weighted fscore: %f' % np.sum(fscores * (weights / float(np.sum(weights))))
+    print('number of one-sense words: %d' % (len(vscores) - len(aris)))
+    print('mean ari: %f' % np.mean(aris))
+    print('mean vscore: %f' % np.mean(vscores))
+    print('weighted vscore: %f' % np.sum(vscores * (weights / float(np.sum(weights)))))
+    print('mean fscore: %f' % np.mean(fscores))
+    print('weighted fscore: %f' % np.sum(fscores * (weights / float(np.sum(weights)))))
     return np.mean(aris),np.mean(vscores)
 
 if __name__ == '__main__':
