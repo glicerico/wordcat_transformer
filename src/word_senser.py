@@ -322,26 +322,25 @@ class WordSenseModel:
         print(f"Num clusters: {num_clusters}")
         fl.write(f"{word}\t\t{num_clusters}\n")
 
-        # If disambiguated, write senses to file, with some sentence examples
-        if num_clusters > 1:
-            with open(save_dir + '/' + word + ".disamb", "w") as fo:
-                for i in range(-1, num_clusters):  # Also write unclustered words
-                    sense_members = [self.vocab_map[word][j] for j, k in enumerate(labels) if k == i]
-                    fo.write(f"Cluster #{i}")
-                    if len(sense_members) > 0:  # Handle empty clusters
-                        fo.write(": \n[")
-                        np.savetxt(fo, sense_members, fmt="(%s, %s, %s)", newline=", ")
-                        fo.write(']\n')
-                        # Write at most 3 sentence examples for the word sense
-                        sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
-                        fo.write('Samples:\n')
-                        # Write sample sentences to file, with focus word in CAPS for easier reading
-                        for sample, focus_word, _ in sent_samples:
-                            bold_sent = self.sentences[sample].split()
-                            bold_sent[focus_word] = bold_sent[focus_word].upper()
-                            fo.write(" ".join(bold_sent) + '\n')
-                    else:
-                        fo.write(" is empty\n\n")
+        # Write senses to file, with some sentence examples
+        with open(save_dir + '/' + word + ".disamb", "w") as fo:
+            for i in range(-1, num_clusters):  # Also write unclustered words
+                sense_members = [self.vocab_map[word][j] for j, k in enumerate(labels) if k == i]
+                fo.write(f"Cluster #{i}")
+                if len(sense_members) > 0:  # Handle empty clusters
+                    fo.write(": \n[")
+                    np.savetxt(fo, sense_members, fmt="(%s, %s, %s)", newline=", ")
+                    fo.write(']\n')
+                    # Write at most 3 sentence examples for the word sense
+                    sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
+                    fo.write('Samples:\n')
+                    # Write sample sentences to file, with focus word in CAPS for easier reading
+                    for sample, focus_word, _ in sent_samples:
+                        bold_sent = self.sentences[sample].split()
+                        bold_sent[focus_word] = bold_sent[focus_word].upper()
+                        fo.write(" ".join(bold_sent) + '\n')
+                else:
+                    fo.write(" is empty\n\n")
 
 
 if __name__ == '__main__':
