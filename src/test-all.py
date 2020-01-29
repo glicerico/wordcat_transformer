@@ -6,15 +6,17 @@ import sys
 import os
 import subprocess
 import itertools
-from sklearn.metrics import adjusted_rand_score,v_measure_score
+from sklearn.metrics import adjusted_rand_score, v_measure_score
+
 
 def get_pairs(labels):
     result = []
     for label in np.unique(labels):
-        ulabels = np.where(labels==label)[0]
+        ulabels = np.where(labels == label)[0]
         for p in itertools.combinations(ulabels, 2):
             result.append(p)
     return result
+
 
 def compute_fscore(true, pred):
     true_pairs = get_pairs(true)
@@ -22,7 +24,8 @@ def compute_fscore(true, pred):
     int_size = len(set(true_pairs).intersection(pred_pairs))
     p = int_size / float(len(pred_pairs))
     r = int_size / float(len(true_pairs))
-    return 2*p*r/float(p+r)
+    return 2 * p * r / float(p + r)
+
 
 def read_answers(filename):
     with open(filename, 'r') as f:
@@ -41,12 +44,13 @@ def read_answers(filename):
                 senses_id[sense] = sense_count
                 sense_count += 1
         answers = {}
-        for k,i,s in zip(keys, instances, senses):
+        for k, i, s in zip(keys, instances, senses):
             if k not in answers:
-                answers[k] = ([],[])
+                answers[k] = ([], [])
             answers[k][0].append(i)
             answers[k][1].append(senses_id[s])
         return answers
+
 
 def compute_metrics(answers, predictions):
     aris = []
@@ -62,7 +66,7 @@ def compute_metrics(answers, predictions):
             aris.append(adjusted_rand_score(true, pred))
         vscores.append(v_measure_score(true, pred))
         fscores.append(compute_fscore(true, pred))
-#        print '%s: ari=%f, vscore=%f, fscore=%f' % (k, aris[-1], vscores[-1], fscores[-1])
+    #        print '%s: ari=%f, vscore=%f, fscore=%f' % (k, aris[-1], vscores[-1], fscores[-1])
     aris = np.array(aris)
     vscores = np.array(vscores)
     fscores = np.array(fscores)
@@ -73,13 +77,13 @@ def compute_metrics(answers, predictions):
     print('weighted vscore: %f' % np.sum(vscores * (weights / float(np.sum(weights)))))
     print('mean fscore: %f' % np.mean(fscores))
     print('weighted fscore: %f' % np.sum(fscores * (weights / float(np.sum(weights)))))
-    return np.mean(aris),np.mean(vscores)
+    return np.mean(aris), np.mean(vscores)
+
 
 if __name__ == '__main__':
-    GS = sys.argv[1]
-    pred = sys.argv[2]
+    GS_file = sys.argv[1]
+    pred_file = sys.argv[2]
 
-    true_answers = read_answers(GS)
-    predictions = read_answers(pred)
+    true_answers = read_answers(GS_file)
+    predictions = read_answers(pred_file)
     compute_metrics(true_answers, predictions)
-
