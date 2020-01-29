@@ -35,7 +35,7 @@ class BERT:
 
 class WordSenseModel:
 
-    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
+    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, mode='eval_only'):
 
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary that stores coordinates of every occurrence of each word
@@ -44,6 +44,7 @@ class WordSenseModel:
 
         self.device_number = device_number
         self.use_cuda = use_cuda
+        self.mode = mode
 
         self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
 
@@ -264,7 +265,11 @@ class WordSenseModel:
                 fk_dbscan.append(open(this_save + "/disamb.pred", 'w'))
 
             # Loop for each word in vocabulary
-            for word, instances, gold_instance in self.vocab_map.items():
+            for word, instances in self.vocab_map.items():
+                if self.mode == 'eval_only' and word not in self.ambiguous_gold:
+                    print(f"Ignoring word \"{word}\", as it is not ambiguous in reference corpus")
+                    continue
+
                 if len(instances) < freq_threshold:  # Don't disambiguate if word is uncommon
                     print(f"Word \"{word}\" frequency out of threshold")
                     continue
@@ -274,12 +279,12 @@ class WordSenseModel:
                 # Build embeddings list for this word
                 curr_embeddings = []
                 for instance in instances:
-                    x, y = instance  # Get current word instance coordinates
+                    x, y, gold_instance = instance  # Get current word instance coordinates
                     curr_embeddings.append(self.embeddings[x][y])
 
                 estimator.fit(curr_embeddings)  # Disambiguate with OPTICS
                 self.write_clusters(fl, save_to, word, estimator.labels_)
-                self.write_predictions(fk, word, estimator.labels_)
+                self.write_predictions(fk, word, estimator.labels_, gold_instance)
 
                 # Use OPTICS estimator to do DBSCAN in range of eps values
                 for eps_val, this_fl, this_fk, this_save in zip(eps_dbscan, fl_dbscan, fk_dbscan, save_dbscan):
@@ -287,7 +292,7 @@ class WordSenseModel:
                                                         core_distances=estimator.core_distances_,
                                                         ordering=estimator.ordering_, eps=eps_val)
                     self.write_clusters(this_fl, this_save, word, this_labels)
-                    self.write_predictions(this_fk, word, this_labels)
+                    self.write_predictions(this_fk, word, this_labels, gold_instance)
 
             for this_fl, this_fk in zip(fl_dbscan, fk_dbscan):
                 this_fl.write("\n")
@@ -300,7 +305,7 @@ class WordSenseModel:
 
     @staticmethod
     def write_predictions(fk, word, labels, gold_instance):
-        if gold_instance:
+        if gold_instance:  # Only save if it's ambiguous in gold standard
             for count, label in enumerate(labels):
                 fk.write(f"{word} {count} {label}\n")
 
@@ -325,13 +330,13 @@ class WordSenseModel:
                     fo.write(f"Cluster #{i}")
                     if len(sense_members) > 0:  # Handle empty clusters
                         fo.write(": \n[")
-                        np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
+                        np.savetxt(fo, sense_members, fmt="(%s, %s, %s)", newline=", ")
                         fo.write(']\n')
                         # Write at most 3 sentence examples for the word sense
                         sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
                         fo.write('Samples:\n')
                         # Write sample sentences to file, with focus word in CAPS for easier reading
-                        for sample, focus_word in sent_samples:
+                        for sample, focus_word, _ in sent_samples:
                             bold_sent = self.sentences[sample].split()
                             bold_sent[focus_word] = bold_sent[focus_word].upper()
                             fo.write(" ".join(bold_sent) + '\n')
@@ -352,6 +357,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
+    parser.add_argument('--mode', type=str, default='eval_only', help='Determines if all words need to be clustered')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
                                                                                'Embeddings to file')
 
@@ -371,9 +377,14 @@ if __name__ == '__main__':
     else:
         print("Using Cosine Similarity!")
 
+    if args.mode == "eval_only":
+        print("Processing only ambiguous words in training corpus")
+    else:
+        print("Processing all words below threshold")
+
     print("Loading WSD Model!")
 
-    WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.no_cuda)
+    WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.no_cuda, mode=args.mode)
 
     print("Loaded WSD Model!")
 
