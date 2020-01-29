@@ -115,7 +115,12 @@ a cluster)
 - metric: cosine
  
  ******
- Decided to output WSD results in format to evaluate with AdaGram's
+ Decided to output WSD results in appropriate format to evaluate with AdaGram's
  evaluator against GOLD standard.
  This will help guide the parameters to use for clustering.
  Tune parameters with training data, evaluate against test data.
+ 
+~~TODO: words disambiguated in some sentences are not considered in other
+ sentences.
+ Will attempt to export to disamb file only those that are disambiguated in
+ key corpus.~~ DONE

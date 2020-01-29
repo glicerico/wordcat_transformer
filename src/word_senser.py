@@ -192,6 +192,7 @@ class WordSenseModel:
 
             # Process all words in sentence
             for word_pos, j in enumerate(zip(sent, senses)):
+                gold_instance = 0  # Bool indicating if a word is disambiguated in reference corpus
                 word = j[0]
                 sense = j[1]
 
@@ -199,11 +200,12 @@ class WordSenseModel:
                 if sense != 0:
                     fk.write(f"{word} {inst_counter} {sense}\n")
                     inst_counter += 1
+                    gold_instance = 1
 
                 # Register word location in vocabulary dictionary
                 if word not in self.vocab_map.keys():
                     self.vocab_map[word] = []
-                self.vocab_map[word].append((sent_nbr, word_pos))
+                self.vocab_map[word].append((sent_nbr, word_pos, gold_instance))
 
                 embedding = np.mean(final_layer[token_count:token_count + len(self.apply_bert_tokenizer(word))], 0)
                 sent_embeddings.append(np.float32(embedding))  # Lower precision for speed
@@ -262,7 +264,7 @@ class WordSenseModel:
                 fk_dbscan.append(open(this_save + "/disamb.pred", 'w'))
 
             # Loop for each word in vocabulary
-            for word, instances in self.vocab_map.items():
+            for word, instances, gold_instance in self.vocab_map.items():
                 if len(instances) < freq_threshold:  # Don't disambiguate if word is uncommon
                     print(f"Word \"{word}\" frequency out of threshold")
                     continue
@@ -296,8 +298,9 @@ class WordSenseModel:
             fl.close()
             fk.close()
 
-    def write_predictions(self, fk, word, labels):
-        if word in self.ambiguous_gold:
+    @staticmethod
+    def write_predictions(fk, word, labels, gold_instance):
+        if gold_instance:
             for count, label in enumerate(labels):
                 fk.write(f"{word} {count} {label}\n")
 
@@ -378,4 +381,4 @@ if __name__ == '__main__':
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(args.save_to, freq_threshold=5)
+        WSD.disambiguate(args.save_to, freq_threshold=3)
