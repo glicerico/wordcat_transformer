@@ -120,7 +120,17 @@ a cluster)
  This will help guide the parameters to use for clustering.
  Tune parameters with training data, evaluate against test data.
  
-~~TODO: words disambiguated in some sentences are not considered in other
- sentences.
+~~TODO: In reference corpus, words disambiguated in some sentences are 
+not considered ambiguous in other sentences.
  Will attempt to export to disamb file only those that are disambiguated in
  key corpus.~~ DONE
+ 
+ ***********
+ There is only one instance of `colorless` in the 
+ `senseval2_lexical_train.xml` corpus, which in bert-sense is counted together
+ with all the `coloUrless` occurrences through use of the lemmatization,
+ but in my code it gets distinguished, so it causes problem with clustering that
+ it occurs only once.
+ I guess I should always use threshold > 1
+ 
+ TODO (efficiency improvement, non-braking): Convert ambiguous_gold to a set

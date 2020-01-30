@@ -209,7 +209,7 @@ class WordSenseModel:
                 self.vocab_map[word].append((sent_nbr, word_pos, gold_instance))
 
                 embedding = np.mean(final_layer[token_count:token_count + len(self.apply_bert_tokenizer(word))], 0)
-                sent_embeddings.append(np.float32(embedding))  # Lower precision for speed
+                sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
                 token_count += len(self.apply_bert_tokenizer(word))
 
                 embeddings_count += 1
@@ -279,12 +279,12 @@ class WordSenseModel:
                 # Build embeddings list for this word
                 curr_embeddings = []
                 for instance in instances:
-                    x, y, gold_instance = instance  # Get current word instance coordinates
+                    x, y, _ = instance  # Get current word instance coordinates
                     curr_embeddings.append(self.embeddings[x][y])
 
                 estimator.fit(curr_embeddings)  # Disambiguate with OPTICS
                 self.write_clusters(fl, save_to, word, estimator.labels_)
-                self.write_predictions(fk, word, estimator.labels_, gold_instance)
+                self.write_predictions(fk, word, estimator.labels_, instances)
 
                 # Use OPTICS estimator to do DBSCAN in range of eps values
                 for eps_val, this_fl, this_fk, this_save in zip(eps_dbscan, fl_dbscan, fk_dbscan, save_dbscan):
@@ -292,7 +292,7 @@ class WordSenseModel:
                                                         core_distances=estimator.core_distances_,
                                                         ordering=estimator.ordering_, eps=eps_val)
                     self.write_clusters(this_fl, this_save, word, this_labels)
-                    self.write_predictions(this_fk, word, this_labels, gold_instance)
+                    self.write_predictions(this_fk, word, this_labels, instances)
 
             for this_fl, this_fk in zip(fl_dbscan, fk_dbscan):
                 this_fl.write("\n")
@@ -304,10 +304,10 @@ class WordSenseModel:
             fk.close()
 
     @staticmethod
-    def write_predictions(fk, word, labels, gold_instance):
-        if gold_instance:  # Only save if it's ambiguous in gold standard
+    def write_predictions(fk, word, labels, instances):
             for count, label in enumerate(labels):
-                fk.write(f"{word} {count} {label}\n")
+                if instances[count][2]:  # Only save if it's ambiguous in gold standard
+                    fk.write(f"{word} {count} {label}\n")
 
     def write_clusters(self, fl, save_dir, word, labels):
         """
@@ -378,7 +378,7 @@ if __name__ == '__main__':
         print("Using Cosine Similarity!")
 
     if args.mode == "eval_only":
-        print("Processing only ambiguous words in training corpus")
+        print("Processing only ambiguous words in training corpus...")
     else:
         print("Processing all words below threshold")
 
