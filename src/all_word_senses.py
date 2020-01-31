@@ -135,7 +135,7 @@ class WordSenseModel:
             print("Embedding File Not Found!! \n")
             print("Calculating embeddings...")
 
-            _x, _y = WSD.calculate_embeddings(corpus_file=corpus_file)
+            _x, _y = self.calculate_embeddings(corpus_file=corpus_file)
 
             with open(pickle_file_name, 'wb') as h:
                 pickle.dump((_x, _y), h)

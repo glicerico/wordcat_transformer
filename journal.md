@@ -73,3 +73,64 @@ using the following steps:
    gather all its embeddings.
    2) Cluster such embeddings to obtain word senses.
    
+*******************
+
+There's a working implementation of WSD in word_senser.py
+
+After experimenting with 
+[senseval2_lexical_sample_train](../UFSAC/corpus/ufsac-public-2.1/senseval2_lexical_sample_test.xml), 
+I notice that memory consumption is quite large using
+the concatenation of the last 4 hidden states.
+In order to keep testing in my laptop, I change to using only the 4th to last
+hidden layer.
+~~TODO: Switch to the average of the last 4 layers, since that is the second
+best result obtained by Devlin et al. (2019).~~
+
+I confirm that using KMeans, which requires a fixed number of clusters,
+spreads similar meanings to different clusters.
+However, the division is not bad for the actual ambiguous terms, 
+and "saw" and "bank" are properly disambiguated in this case.
+~~TODO: However, it's a good idea to try some agglomerative methods.~~
+
+~~TODO: convert variables to class variables~~
+
+*******************
+Decided to try sklearn clustering algorithms which don't necessarily cluster
+all words.
+
+Tried DBSCAN with a few different parameters: it's clear that the param
+that decides the minimum distance for a cluster is crucial, so then
+decided to try OPTICS, which allows to use a range for that value, to
+see which gives more reasonable clusters.
+
+One thing noted with DBSCAN is that the clustering is not bad.
+When the appropriate parameters are chosen, words are disambiguated in
+clusters that sometimes portray the same meaning, but one or two clusters
+give a very distinct meaning.
+Very little overlap between meanings was observed in the same clusters.
+
+Parameters decided for OPTICS method:
+- min_samples: 0.1 (10% of all occurrences of a word are the min to define 
+a cluster)
+- metric: cosine
+ 
+ ******
+ Decided to output WSD results in appropriate format to evaluate with AdaGram's
+ evaluator against GOLD standard.
+ This will help guide the parameters to use for clustering.
+ Tune parameters with training data, evaluate against test data.
+ 
+~~TODO: In reference corpus, words disambiguated in some sentences are 
+not considered ambiguous in other sentences.
+ Will attempt to export to disamb file only those that are disambiguated in
+ key corpus.~~ DONE
+ 
+ ***********
+ There is only one instance of `colorless` in the 
+ `senseval2_lexical_train.xml` corpus, which in bert-sense is counted together
+ with all the `coloUrless` occurrences through use of the lemmatization,
+ but in my code it gets distinguished, so it causes problem with clustering that
+ it occurs only once.
+ I guess I should always use threshold > 1
+ 
+ TODO (efficiency improvement, non-braking): Convert ambiguous_gold to a set
