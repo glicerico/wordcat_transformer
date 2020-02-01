@@ -247,10 +247,10 @@ In this example, 6 clusters seems like the best result with the above sentences.
  ***********
  
  TODO:
- - Organize code in functions
+ ~~- Organize code in functions~~
  - Try clustering with DBSCAN/OPTICS, which leave some words unclustered
  - Automate masking every word in the sentence
  - Add some voting system to decide which words go in a cluster? Currently
  all "high" words in every member of a cluster go into it.
  - Handle sub-words in sentences
- - Try with large bert model
+ ~~- Try with large bert model~~
