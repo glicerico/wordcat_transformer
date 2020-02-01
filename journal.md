@@ -11,8 +11,8 @@ However, those abstractions don't seem to be found in the attention layers in
 a straightforward manner (see Clarke et al. 2019, Htut et al. 2019), and not
 easily extractable in an unsupervised manner (for supervised mapping of the
 syntactic knowledge learned by BERT, see Hewitt and Manning 2019).
-Thus, Ben proposes to use external statistical methods to "milk" the syntactic
-relationships that we are looking for out of BERT.
+Thus, Ben proposes to use external statistical methods to "milk" BERT the syntactic
+relationships that we are looking for.
 
 Based on the code by Wiedemann et al. (2019, github.com/uhh-lt/bert-sense), I 
 first updated [Bert_Model.py](src/Bert_Model.py) to use the latest huggingface transformers models 
@@ -26,7 +26,7 @@ in the corpus, then cluster them and hope that word categories will appear
 as a result.
 This idea is coming from the previous use of word2vec and AdaGram vectors
 for word categorization. 
-The code for this attempts is at [all_word_senses.py](src/all_word_senses.py).
+The code for this attempt is at [all_word_senses.py](src/all_word_senses.py).
 Some of the design decisions made were:
 - Use the concatenation of the last 4 attention layers for embeddings, 
 like bert-sense and the original BERT paper (Devlin et al 2018).
@@ -45,12 +45,14 @@ at least two problems were noted:
 embeddings here, while syntactic functions were not clearly distinguished in 
 the resulting clusters: words like medicine, medicinal, pharmacist would 
 commonly fall in the same cluster.
-2) Memory requirements grew very quickly when handling a decent corpus,
-since a unique word embedding needs to be stored for each single word 
+2) Memory requirements grew very quickly when handling a decent-sized corpus
+(8611 sentences, 251,767 words),
+since a unique word embedding is required for each single word instance
 in the corpus.
+**********
 
-So, I decided to proceed with the plan discussed with Ben last week, which
-gord more or less like this:
+Instead, I decided to proceed with the plan discussed with Ben last week, which
+goes more or less like this:
 
 1) Disambiguate words using their unique embeddings: 
 come up with a few senses for each word above some frequency threshold.
@@ -58,9 +60,9 @@ come up with a few senses for each word above some frequency threshold.
 in sentence probabilities between each word and other words.
 3) Use above matrix to get word-sense embeddings.
 4) Cluster the vectors to form word categories. Use a Clark-like clustering
-method, were not all word-senses will be categorized.
+method, where not all word-senses will be categorized.
 
-Current work is to implement step 1) above in [WSD.py](src/WSD.py), 
+Current work is to implement step 1) above in [word_senser.py](src/word-senser.py), 
 using the following steps:
 - First pass
    3) Store sentences in corpus in order 
@@ -81,10 +83,11 @@ After experimenting with
 [senseval2_lexical_sample_train](../UFSAC/corpus/ufsac-public-2.1/senseval2_lexical_sample_test.xml), 
 I notice that memory consumption is quite large using
 the concatenation of the last 4 hidden states.
-In order to keep testing in my laptop, I change to using only the 4th to last
-hidden layer.
+In order to keep testing in my laptop, I change to using ~~only the 4th to last
+hidden layer.~~
 ~~TODO: Switch to the average of the last 4 layers, since that is the second
 best result obtained by Devlin et al. (2019).~~
+the arithmetic average of the last 4 layers.
 
 I confirm that using KMeans, which requires a fixed number of clusters,
 spreads similar meanings to different clusters.
@@ -134,3 +137,19 @@ not considered ambiguous in other sentences.
  I guess I should always use threshold > 1
  
  TODO (efficiency improvement, non-braking): Convert ambiguous_gold to a set
+ 
+ **************
+ 
+Modified AdaGram's [test-all.py](src/test-all.py) to evaluate the
+disambiguation results.
+TODO: Fix problem causing division by zero, and evaluate results in nova.
+ 
+ 
+ ************
+ 
+ TODO:
+ - Try clustering with DBSCAN/OPTICS, which leave some words unclustered
+ - Automate masking every word in the sentence
+ - Add some voting system to decide which words go in a cluster? Currently
+ all "high" words in every member of a cluster go into it.
+ - Try with large bert model
