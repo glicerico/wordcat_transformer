@@ -140,16 +140,117 @@ not considered ambiguous in other sentences.
  
  **************
  
-Modified AdaGram's [test-all.py](src/test-all.py) to evaluate the
-disambiguation results.
-TODO: Fix problem causing division by zero, and evaluate results in nova.
+ Modified AdaGram's [test-all.py](src/test-all.py) to evaluate the
+ disambiguation results.
+ TODO: Fix problem causing division by zero, and evaluate results in nova.
  
  
  ************
+ After a new discussion with Ben, he came up with another way of creating
+ word categories that takes care of disambiguation in the process!
+ 
+ The idea is as follows:
+ - For a series of sentences, mask one (random?) word in each.
+ - Using BERT, get the logit prediction for the masked word in a sentence.
+ This "embedding" for the predicted word will be similar to those of
+ other sentences where the mask accomplishes a similar semantic and 
+ syntactic function.
+ Even if semantics are involved, the syntactic requirement will play
+ a very important part, as BERT predicts grammatical sentences.
+ - Cluster the vector predictions for all the sentences.
+ - Form a word category by adding together the top predictions for
+ all the vectors in a given cluster.
+ 
+ Note that this process disambiguates word senses, as the same word can 
+ have a high probability of occurring in predictions for different clusters.
+ 
+ First try with just a few sentences, clustered with KMeans, in 
+ [wordcat_bert.ipynb](notebooks/wordcat_bert.ipynb).
+ Masked words are only adjectives, personal nouns, location nouns.
+ Obtained word categories look quite decent, and of course the granularity
+ depends on the number of clusters used:
+ 
+ Sentences:
+- The _ cat ate the mouse.
+- She was wearing a lovely _ dress last night.
+- He was receiving quite a _ salary.
+- He also bought a _ sofa for his new apartment.
+- I was born and grew up in _.
+- The _ metropolitan area added more than a million people in the past decade.
+- Bike races are held around the _ and farmlands.
+- My racist _ called me last night.
+- A device is considered to be available if it is not being used by another _.
+ 
+ Clusters with k = 3 (3 clusters)
+ - Category 0:
+little, modest, evening, handsome, new, black, generous, luxury, great, silver, blue, white, gray, yellow, old, green, brown, comfortable, respectable, small, low, fine, giant, good, decent, leather, silk, substantial, pink, red, dead, mother, steady, big, wild, luxurious, nice, high, purple, wedding, large, fat, considerable, cheshire
+
+ - Category 1:
+indianapolis, village, washington, toronto, lake, london, mountains, city, atlanta, california, woods, austin, cleveland, mexico, brooklyn, forest, hills, gardens, philadelphia, countryside, denver, chicago, minneapolis, florida, seattle, portland, farms, parks, dallas, germany, towns, detroit, france, park, lakes, louisville, texas, england, pittsburgh, villages, forests, houston, town, canada, fields
+
+ - Category 2:
+cousin, neighbors, friend, entity, dad, boyfriend, customer, roommate, friends, application, person, organization, father, party, neighbor, wife, company, partner, mother, girlfriend, provider, brother, user, device, uncle, boss, husband
+ 
+ Clusters with k = 4
+ 
+ - Category 0:
+modest, cousin, handsome, generous, neighbors, friend, dad, boyfriend, roommate, friends, comfortable, respectable, low, small, fine, decent, good, father, boss, substantial, neighbor, wife, partner, steady, mother, girlfriend, brother, nice, high, uncle, large, considerable, husband
+
+- Category 1:
+indianapolis, village, washington, toronto, lake, london, mountains, city, atlanta, california, woods, austin, cleveland, mexico, brooklyn, forest, hills, gardens, philadelphia, countryside, denver, chicago, minneapolis, florida, seattle, portland, farms, parks, dallas, germany, towns, detroit, france, park, lakes, louisville, texas, england, pittsburgh, villages, forests, houston, town, canada, fields
+
+- Category 2:
+little, evening, new, black, luxury, great, silver, blue, white, gray, yellow, old, green, brown, comfortable, small, giant, leather, silk, pink, red, dead, mother, big, wild, luxurious, purple, wedding, large, fat, cheshire
+
+- Category 3:
+user, party, application, device, entity, company, person, customer, provider, organization
+ 
+ Clusters with k = 5
+ 
+ - Category 0:
+indianapolis, village, washington, toronto, lake, london, mountains, city, atlanta, california, woods, austin, cleveland, mexico, brooklyn, forest, hills, gardens, philadelphia, countryside, denver, chicago, minneapolis, florida, seattle, portland, farms, parks, dallas, germany, towns, detroit, france, park, lakes, louisville, texas, england, pittsburgh, villages, forests, houston, town, canada, fields
+
+- Category 1:
+little, evening, new, black, luxury, great, silver, blue, white, gray, yellow, old, green, brown, comfortable, small, giant, leather, silk, pink, red, dead, mother, big, wild, luxurious, purple, wedding, large, fat, cheshire
+
+- Category 2:
+user, party, application, device, entity, company, person, customer, provider, organization
+
+- Category 3:
+nice, modest, handsome, decent, high, comfortable, steady, substantial, generous, respectable, low, small, fine, large, considerable, good
+
+- Category 4:
+father, cousin, friends, boss, neighbors, husband, friend, dad, uncle, neighbor, wife, boyfriend, partner, mother, girlfriend, brother, roommate
+ 
+ Clusters with k = 6
+ 
+ Category 0:
+nice, modest, handsome, decent, high, comfortable, steady, substantial, generous, respectable, low, small, fine, large, considerable, good
+
+Category 1:
+little, evening, new, black, luxury, great, silver, blue, white, gray, yellow, old, green, brown, comfortable, small, giant, leather, silk, pink, red, dead, mother, big, wild, luxurious, purple, wedding, large, fat, cheshire
+
+Category 2:
+father, cousin, friends, boss, neighbors, husband, friend, dad, uncle, neighbor, wife, boyfriend, partner, mother, girlfriend, brother, roommate
+
+Category 3:
+indianapolis, washington, toronto, london, atlanta, california, austin, cleveland, mexico, brooklyn, philadelphia, denver, chicago, minneapolis, florida, seattle, portland, dallas, germany, detroit, france, louisville, texas, england, pittsburgh, houston, canada
+
+Category 4:
+village, forest, hills, forests, gardens, countryside, towns, parks, lake, park, lakes, town, mountains, city, farms, villages, fields, woods
+
+Category 5:
+user, party, application, device, entity, company, person, customer, provider, organization
+
+
+In this example, 6 clusters seems like the best result with the above sentences.
+ ***********
  
  TODO:
+ - Organize code in functions
  - Try clustering with DBSCAN/OPTICS, which leave some words unclustered
  - Automate masking every word in the sentence
  - Add some voting system to decide which words go in a cluster? Currently
  all "high" words in every member of a cluster go into it.
+ - Handle sub-words in sentences
  - Try with large bert model
