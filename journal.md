@@ -254,3 +254,37 @@ In this example, 6 clusters seems like the best result with the above sentences.
  all "high" words in every member of a cluster go into it.
  - Handle sub-words in sentences
  ~~- Try with large bert model~~
+ 
+ ********
+ Also tried masking every word in the above sentences and clustering that way.
+ Results can be found in [wordcat_funcs.ipynb](notebooks/wordcat_funcs.ipynb).
+ The categories are not as crisp and in the former, simpler case... they
+ contain some noisy results.
+ 
+ ********
+ ## Feb 2020
+
+After reporting the clustering results above, Ben pointed out that the idea
+he had in mind is different.
+I was clustering sentences, and obtaining the word categories from them in
+a way that circumvents WSD.
+However, as Ben noted, this won't work in general, as you can have 
+syntactically different predictions from the logit vectors:
+```
+Sentence:
+The fat cat [MASK] the mouse.
+Ordered top predicted tokens: ['.', 'and', ',', 'or', ';']
+Ordered top predicted values: [0.5628975  0.32685623 0.05045042 0.00994903 0.0039914 ]
+```
+
+Instead, Ben proposes to fill the sentence-word matrix with the probabilities
+of the given masked sentence, if the mask is substituted by the given word.
+`P(S_i|W)`: Probability of sentence `S_i`, which has one masked position, 
+if word W is placed instead of the mask.
+That is: `Ai_j = P(S_i|W=j)`
+This approach will require several more evaluations than the one I tried
+above (a factor of around `V*avg_l` more evaluations, where V is the size of the
+vocabulary, and `avg_l` is the average sentence length).
+However, it seems intuitive that his approach should work better.
+This approach would require a separate sense disambiguation, though... perhaps
+the one implemented in [word_senser.py](src/word_senser.py).
