@@ -288,3 +288,13 @@ vocabulary, and `avg_l` is the average sentence length).
 However, it seems intuitive that his approach should work better.
 This approach would require a separate sense disambiguation, though... perhaps
 the one implemented in [word_senser.py](src/word_senser.py).
+
+********
+While reviewing code in [Bert_as_LM.ipynb](notebooks/Bert_as_LM.ipynb), I
+notice that the normalized sentence probability is taking the sentence length
+as the number of sub-words.
+For most words, the sub-words have normally quite high probability, so this
+may be biasing probabilities in favor of sentences with a high ratio of 
+sub-words.
+Maybe I should divide by the length of the sentence in words, not counting
+sub-words?
