@@ -1,27 +1,37 @@
 import numpy as np
 import torch
 from transformers import BertTokenizer, BertForMaskedLM
+from src import BERT
 
 BOS_TOKEN = '[CLS]'
 EOS_TOKEN = '[SEP]'
 MASK_TOKEN = '[MASK]'
 
 
-class BERT:
-    def __init__(self, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
+class WordCategorizer:
+    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=False):
+
         self.device_number = device_number
         self.use_cuda = use_cuda
 
-        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
+        self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
 
-        self.model = BertForMaskedLM.from_pretrained(pretrained_model)
-        with torch.no_grad():
-            self.model.eval()
+        self.matrix = []
 
-        if use_cuda:
-            self.model.to(device_number)
+    def load_vocabulary(self, vocab_filename):
+        with open(vocab_filename, 'r') as fv:
+            fv.readlines(vocab_filename)
+
 
     def print_top_predictions(self, probs, k=5):
+        """
+        Prints the top-k predicted words contained in probs, and their probabilities.
+        :param probs:   A tensor containing the probability for each word in the vocabulary.
+                        Probs is calculated via softmax from the logit tensor returned by
+                        a masked prediction by the transformer.
+        :param k:       Number of top predictions to print
+        :return:        Nothing, only prints info
+        """
         probs = probs.detach().numpy()
         top_indexes = np.argpartition(probs, -k)[-k:]
         sorted_indexes = top_indexes[np.argsort(-probs[top_indexes])]
@@ -29,17 +39,18 @@ class BERT:
         print(f"Ordered top predicted tokens: {top_tokens}")
         print(f"Ordered top predicted values: {probs[sorted_indexes]}")
 
-    def get_sentence_prob(self, sentence, word, verbose=False):
+    def get_sentence_prob(self, sentence, verbose=False):
 
         """
-        Estimate the sentence probability if word is placed in sentence, in the masked location.
-        Let S_i be a sentence with an empty slot, e.g. 'My racist ___ called me last night.', then this function
-        takes the input 'word', places it in the empty slot, and returns the sentence probability P(S_i|___=word).
+        Estimate the sentence probability P(S), where S is a sentence.
         This probability is composed by using the given transformer model's predictions, as follows:
-        P(S_i) = Prod_i(P(w_i|w_0, w_1,..,w_i-1,w_i+1,..,w_N)),
-        where N is the number of words in the sentence, and each P(w_i|...) is given by a transformer evaluation.
-
-        :return:
+        P(S) = Prod_i(P(w_i|w_0, w_1,..,w_i-1,w_i+1,..,w_N)),
+        where N is the number of words in the sentence, and each P(w_i|...) is given by a transformer masked
+        word prediction.
+        Hence, one sentence probability requires N masked word prediction evaluations.
+        :param sentence: Input sentence
+        :param verbose: Print information about the obtained probabilities or not.
+        :return: Sentence probability normalized by sentence length
         """
         sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
 
@@ -51,8 +62,9 @@ class BERT:
         if tokenized_input[-1] != EOS_TOKEN:
             tokenized_input.append(EOS_TOKEN)
         ids_input = self.tokenizer.convert_tokens_to_ids(tokenized_input)
-        print(f"Processing sentence: {tokenized_input}")
-        # print(f"Sentence ids: {ids_input}")
+        if verbose:
+            print(f"Processing sentence: {tokenized_input}")
+            # print(f"Sentence ids: {ids_input}")
 
         # sent_prob = 1
         sum_lp = 0
@@ -60,8 +72,6 @@ class BERT:
         for i in range(1, len(tokenized_input) - 1):  # Ignore first and last tokens
             current_tokenized = tokenized_input[:]
             current_tokenized[i] = MASK_TOKEN
-            if verbose:
-                print(current_tokenized)
             masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokenized)])
             predictions = self.model(masked_input)[0]
             current_probs = sm(predictions[0, i])  # Softmax to get probabilities
@@ -70,10 +80,13 @@ class BERT:
             # sent_prob *= current_prob
             sum_lp += np.log(current_prob.detach().numpy())
 
-            print(f"Word: {tokenized_input[i]} \t Prob: {current_prob}")
             if verbose:
+                print(current_tokenized)
+                print(f"Word: {tokenized_input[i]} \t Prob: {current_prob}")
                 self.print_top_predictions(current_probs)
 
         # print(f"\nSentence probability: {sent_prob.item()}\n")
-        print(f"\nNormalized sentence prob: log(P(sentence)) / sent_length: {sum_lp / sent_len}\n")
+        if verbose:
+            print(f"\nNormalized sentence prob: log(P(sentence)) / sent_length: {sum_lp / sent_len}\n")
+
         return sum_lp / sent_len
