@@ -8,7 +8,7 @@ MASK_TOKEN = '[MASK]'
 
 
 class BertLM:
-    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, output_hidden_states=True):
+    def __init__(self, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
         self.device_number = device_number
         self.use_cuda = use_cuda
 
