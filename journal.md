@@ -296,5 +296,63 @@ as the number of sub-words.
 For most words, the sub-words have normally quite high probability, so this
 may be biasing probabilities in favor of sentences with a high ratio of 
 sub-words.
-Maybe I should divide by the length of the sentence in words, not counting
+TODO: Maybe I should divide by the length of the sentence in words, not counting
 sub-words?
+
+Also, the probabilities of subworded words is much higher than regular
+words, because I'm masking one subword at a time, so the other subwords
+can have high probabilities because they fit well with the surrounding
+subwords, even if not too much with the rest of the sentence.
+Example:
+The sentence `This is a macrame` should have quite a low probability, but
+because of sub-words, it's actually quite high:
+```
+Processing sentence: ['[CLS]', 'this', 'is', 'a', 'mac', '##ram', '##e', '.', '[SEP]']
+['[CLS]', '[MASK]', 'is', 'a', 'mac', '##ram', '##e', '.', '[SEP]']
+Word: this 	 Prob: 0.06995750218629837
+Ordered top predicted tokens: ['it', 'this', 'there', 'he', 'that']
+Ordered top predicted values: [0.8618048  0.0699575  0.02746578 0.00282901 0.00164153]
+['[CLS]', 'this', '[MASK]', 'a', 'mac', '##ram', '##e', '.', '[SEP]']
+Word: is 	 Prob: 0.8059344291687012
+Ordered top predicted tokens: ['is', 'was', 'has', 'resembles', 'includes']
+Ordered top predicted values: [0.8059344  0.14677647 0.00251259 0.00214571 0.00181202]
+['[CLS]', 'this', 'is', '[MASK]', 'mac', '##ram', '##e', '.', '[SEP]']
+Word: a 	 Prob: 0.3107656240463257
+Ordered top predicted tokens: ['a', 'the', 'called', 'not', 'another']
+Ordered top predicted values: [0.31076562 0.24131534 0.1898963  0.01890805 0.01177635]
+['[CLS]', 'this', 'is', 'a', '[MASK]', '##ram', '##e', '.', '[SEP]']
+Word: mac 	 Prob: 0.4050573706626892
+Ordered top predicted tokens: ['mac', 'ce', 'side', 'cup', 'semi']
+Ordered top predicted values: [0.40505737 0.0790267  0.05402635 0.0435847  0.03299322]
+['[CLS]', 'this', 'is', 'a', 'mac', '[MASK]', '##e', '.', '[SEP]']
+Word: ##ram 	 Prob: 0.2340756058692932
+Ordered top predicted tokens: ['##ram', '##ula', '##out', '##abe', '##are']
+Ordered top predicted values: [0.2340756  0.13345419 0.10716671 0.05448193 0.03716443]
+['[CLS]', 'this', 'is', 'a', 'mac', '##ram', '[MASK]', '.', '[SEP]']
+Word: ##e 	 Prob: 0.7259987592697144
+Ordered top predicted tokens: ['##e', '##id', '##i', 'plant', 'virus']
+Ordered top predicted values: [0.72599876 0.0952542  0.03262086 0.01331557 0.00876465]
+['[CLS]', 'this', 'is', 'a', 'mac', '##ram', '##e', '[MASK]', '[SEP]']
+Word: . 	 Prob: 0.9112837910652161
+Ordered top predicted tokens: ['.', ';', '!', '?', '|']
+Ordered top predicted values: [9.1128379e-01 7.5437672e-02 8.2414346e-03 4.5370557e-03 3.7746594e-04]
+
+Normalized sentence prob: log(P(sentence)) / sent_length: -0.9733260146209172
+```
+TODO: Handle subwords differently
+
+**************
+File [word_categorizer.py](src/word_categorizer.py) contains the current
+attempt with Ben's approach discussed above.
+
+Some notes:
+- Start with simple English vocab (some files in [vocabularies](vocabularies))
+- Start with small number of sentences.
+- Probably should use sparse vectors and assign very low sentence probs
+ (below some) threshold as zeros.
+ Need to make sure that clustering can handle sparse vectors, or else
+ - Should implement Clark-style clustering algo.
+ - Currently, I don't think it's worth to reuse BERT evaluations for 
+ different words... I think saved processing time is small compared to
+ added algorithm complexity
+ - 
