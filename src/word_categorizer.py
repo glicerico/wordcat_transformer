@@ -15,7 +15,7 @@ class WordCategorizer:
 
         self.vocab = []
         self.load_vocabulary(vocab_filename)
-        self.matrix = [[] for _ in range(len(self.vocab))]  # Initialize matrix as list of lists for each word
+        self.matrix = []
 
     def load_vocabulary(self, vocab_filename):
         """
@@ -35,36 +35,43 @@ class WordCategorizer:
     #     with open(sents_filename, 'r') as fs:
     #         self.sents = fs.readlines()
 
-    def populate_matrix(self, sents_filename):
+    def populate_matrix(self, sents_filename, num_masks=1, verbose=False):
         """
         Calculates probability matrix for the sentence-word pairs
         Currently can only handle one mask per sentence. We can repeat sentences in the sents_file as
         a workaround to this.
         :param sents_filename:  File with input sentences
+        :param num_masks:       Repetitions for each sentence, with different masks
         :return: None
         """
+        num_sents = 0
         with open(sents_filename, 'r') as fs:
-            self.matrix = [self.process_sentence(sent, word) for sent in fs for word in self.vocab]
+            for sent in fs:
+                tokenized_sent = self.Bert_Model.tokenizer.tokenize(sent)
+                masks_pos = rand.sample(range(1, len(tokenized_sent) - 1), num_masks)
+                for mask_pos in masks_pos:
+                    sent_row = [self.process_sentence(tokenized_sent, word, mask_pos, verbose=verbose) for word in self.vocab]
+                    self.matrix.extend(sent_row)
+                    num_sents += 1
+
             self.matrix = np.reshape(self.matrix, (round(len(self.matrix)/len(self.vocab)), len(self.vocab)))
 
-    def process_sentence(self, sent, word):
+    def process_sentence(self, tokenized_sent, word, mask_pos, verbose=False):
         """
         Replaces word in mask_pos for input word, and evaluates the sentence probability
-        :param sent: Input sentence
+        :param tokenized_sent: Input sentence
         :param word: Input word
         :param mask_pos: Position to replace input word
         :return:
         """
-        tokenized_sent = self.Bert_Model.tokenizer.tokenize(sent)
-        mask_pos = rand.randint(0, len(tokenized_sent) - 1)
         tokenized_sent[mask_pos] = word
-        curr_prob = self.Bert_Model.get_sentence_prob(tokenized_sent)
+        curr_prob = self.Bert_Model.get_sentence_prob(tokenized_sent, verbose=verbose)
 
         return curr_prob
 
 
 if __name__ == '__main__':
     wc = WordCategorizer('../vocabularies/test.vocab')
-    wc.populate_matrix('../sentences/9sentences.txt')
+    wc.populate_matrix('../sentences/9sentences.txt', verbose=True)
     print(wc.matrix)
 
