@@ -37,7 +37,7 @@ class BertLM:
         print(f"Ordered top predicted tokens: {top_tokens}")
         print(f"Ordered top predicted values: {probs[sorted_indexes]}")
 
-    def get_sentence_prob(self, sentence, verbose=False):
+    def get_sentence_prob(self, tokenized_input, verbose=False):
 
         """
         Estimate the sentence probability P(S), where S is a sentence.
@@ -53,7 +53,7 @@ class BertLM:
         sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
 
         # Pre-process sentence, adding special tokens
-        tokenized_input = self.tokenizer.tokenize(sentence)
+        # tokenized_input = self.tokenizer.tokenize(sentence)  ### Input comes pre-tokenized, bad design :(
         sent_len = len(tokenized_input)
         if tokenized_input[0] != BOS_TOKEN:
             tokenized_input.insert(0, BOS_TOKEN)

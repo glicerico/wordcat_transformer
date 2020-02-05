@@ -36,16 +36,35 @@ class WordCategorizer:
     #         self.sents = fs.readlines()
 
     def populate_matrix(self, sents_filename):
+        """
+        Calculates probability matrix for the sentence-word pairs
+        Currently can only handle one mask per sentence. We can repeat sentences in the sents_file as
+        a workaround to this.
+        :param sents_filename:  File with input sentences
+        :return: None
+        """
         with open(sents_filename, 'r') as fs:
-            for sent in fs:
-                process_sentence(sent)
+            self.matrix = [self.process_sentence(sent, word) for sent in fs for word in self.vocab]
+            self.matrix = np.reshape(self.matrix, (round(len(self.matrix)/len(self.vocab)), len(self.vocab)))
 
-    def process_sentence(self, sent, num_masks=2):
-        # rand.sample()  # Sample which positions will be used for masking
-        mask_locations = [rand.randint(1, len(sent) - 2)]  # Avoid masking special boundary tokens
-        for pos in mask_locations:
-            for word_id, word in enumerate(self.vocab):
-                sent[pos] = word
-                curr_prob = self.Bert_Model.get_sentence_prob(sent)
-                self.matrix[word_id].append(curr_prob)
+    def process_sentence(self, sent, word):
+        """
+        Replaces word in mask_pos for input word, and evaluates the sentence probability
+        :param sent: Input sentence
+        :param word: Input word
+        :param mask_pos: Position to replace input word
+        :return:
+        """
+        tokenized_sent = self.Bert_Model.tokenizer.tokenize(sent)
+        mask_pos = rand.randint(0, len(tokenized_sent) - 1)
+        tokenized_sent[mask_pos] = word
+        curr_prob = self.Bert_Model.get_sentence_prob(tokenized_sent)
+
+        return curr_prob
+
+
+if __name__ == '__main__':
+    wc = WordCategorizer('../vocabularies/test.vocab')
+    wc.populate_matrix('../sentences/9sentences.txt')
+    print(wc.matrix)
 
