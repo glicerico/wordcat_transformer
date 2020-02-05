@@ -37,6 +37,14 @@ class BertLM:
         print(f"Ordered top predicted tokens: {top_tokens}")
         print(f"Ordered top predicted values: {probs[sorted_indexes]}")
 
+    def tokenize_sent(self, sentence):
+        tokenized_input = self.tokenizer.tokenize(sentence)
+        if tokenized_input[0] != BOS_TOKEN:
+            tokenized_input.insert(0, BOS_TOKEN)
+        if tokenized_input[-1] != EOS_TOKEN:
+            tokenized_input.append(EOS_TOKEN)
+        return tokenized_input
+
     def get_sentence_prob(self, tokenized_input, verbose=False):
 
         """
@@ -55,10 +63,10 @@ class BertLM:
         # Pre-process sentence, adding special tokens
         # tokenized_input = self.tokenizer.tokenize(sentence)  ### Input comes pre-tokenized, bad design :(
         sent_len = len(tokenized_input)
-        if tokenized_input[0] != BOS_TOKEN:
-            tokenized_input.insert(0, BOS_TOKEN)
-        if tokenized_input[-1] != EOS_TOKEN:
-            tokenized_input.append(EOS_TOKEN)
+        # if tokenized_input[0] != BOS_TOKEN:
+        #     tokenized_input.insert(0, BOS_TOKEN)
+        # if tokenized_input[-1] != EOS_TOKEN:
+        #     tokenized_input.append(EOS_TOKEN)
         ids_input = self.tokenizer.convert_tokens_to_ids(tokenized_input)
         if verbose:
             print(f"Processing sentence: {tokenized_input}")

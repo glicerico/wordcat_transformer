@@ -24,16 +24,7 @@ class WordCategorizer:
         :return:                None
         """
         with open(vocab_filename, 'r') as fv:
-            self.vocab = fv.readlines()
-
-    # def load_sentences(self, sents_filename):
-    #     """
-    #     Reads sentences file. File format must be one sentence per line, no comments accepted.
-    #     :param sents_filename:  Path to sentence file
-    #     :return:                None
-    #     """
-    #     with open(sents_filename, 'r') as fs:
-    #         self.sents = fs.readlines()
+            self.vocab = fv.read().splitlines()
 
     def populate_matrix(self, sents_filename, num_masks=1, verbose=False):
         """
@@ -47,8 +38,8 @@ class WordCategorizer:
         num_sents = 0
         with open(sents_filename, 'r') as fs:
             for sent in fs:
-                tokenized_sent = self.Bert_Model.tokenizer.tokenize(sent)
-                masks_pos = rand.sample(range(1, len(tokenized_sent) - 1), num_masks)
+                tokenized_sent = self.Bert_Model.tokenize_sent(sent)
+                masks_pos = rand.sample(range(1, len(tokenized_sent) + 1), num_masks)  # Don't mask boundary tokens
                 for mask_pos in masks_pos:
                     sent_row = [self.process_sentence(tokenized_sent, word, mask_pos, verbose=verbose) for word in self.vocab]
                     self.matrix.extend(sent_row)
