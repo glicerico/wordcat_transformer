@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import random as rand
 from sklearn.cluster import KMeans, DBSCAN
@@ -16,7 +17,7 @@ class WordCategorizer:
 
         self.vocab = []
         self.load_vocabulary(vocab_filename)
-        self.matrix = []
+        self.matrix = []  # Stores sent probability for each sentence-word pair (rows are sentences)
 
     def load_vocabulary(self, vocab_filename):
         """
@@ -69,12 +70,36 @@ class WordCategorizer:
 
         k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
         estimator = KMeans(n_clusters=k, n_jobs=4)
-        estimator.fit(self.matrix)
+        estimator.fit(np.array(self.matrix).T)  # Transpose matrix to cluster words, not sentences
         return estimator.labels_
+
+    def write_clusters(self, save_to, labels):
+        """
+        Write clustering results to file
+        :param save_to:        Directory to save disambiguated senses
+        :param labels:         Cluster labels
+        """
+        num_clusters = max(labels) + 1
+        print(f"Num clusters: {num_clusters}")
+
+        # Write word categories to file
+        if not os.path.exists(save_to):
+            os.makedirs(save_to)
+        with open(save_to + '/categories.txt', "w") as fo:
+            for i in range(-1, num_clusters):  # Also write unclustered words
+                # sense_members = [self.vocab_map[word][j] for j, k in enumerate(labels) if k == i]
+                cluster_members = [self.vocab[j] for j, k in enumerate(labels) if k == i]
+                fo.write(f"Cluster #{i}")
+                if len(cluster_members) > 0:  # Handle empty clusters
+                    fo.write(": \n[")
+                    np.savetxt(fo, cluster_members, fmt="%s", newline=", ")
+                    fo.write(']\n')
+                else:
+                    fo.write(" is empty\n\n")
 
 
 if __name__ == '__main__':
     wc = WordCategorizer('../vocabularies/minitest.vocab')
-    wc.populate_matrix('../sentences/3sentences.txt', verbose=True)
-    print(wc.matrix)
-    labels = wc.cluster_words(k=4)
+    wc.populate_matrix('../sentences/3sentences.txt', verbose=False)
+    cluster_labels = wc.cluster_words(k=2)
+    wc.write_clusters('test', cluster_labels, verbose=True)

@@ -350,8 +350,8 @@ Some notes:
 - Start with small number of sentences.
 - Probably should use sparse vectors and assign very low sentence probs
  (below some threshold) as zeros.
- Need to make sure that clustering can handle sparse vectors, or else
- - Should implement Clark-style clustering algo.
+ ~~Need to make sure that clustering can handle sparse vectors, or else~~
+ - ~~Should~~ Could implement Clark-style clustering algo.
  - Currently, I don't think it's worth to reuse BERT evaluations for 
  different words... I think saved processing time is small compared to
  added algorithm complexity
