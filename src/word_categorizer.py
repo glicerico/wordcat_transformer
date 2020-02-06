@@ -2,6 +2,7 @@ import os
 import numpy as np
 import random as rand
 from sklearn.cluster import KMeans, DBSCAN
+from tqdm import tqdm
 
 # My modules
 from src.BertLM import BertLM
@@ -13,9 +14,11 @@ class WordCategorizer:
         self.device_number = device_number
         self.use_cuda = use_cuda
 
+        print("Loading BERT model...")
         self.Bert_Model = BertLM(pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
 
         self.vocab = []
+        print("Loading vocabulary...")
         self.load_vocabulary(vocab_filename)
         self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
 
@@ -37,6 +40,7 @@ class WordCategorizer:
         :param num_masks:       Repetitions for each sentence, with different masks
         :return: None
         """
+        print("Evaluating word-sentence probabilities")
         num_sents = 0
         with open(sents_filename, 'r') as fs:
             for sent in fs:
@@ -44,7 +48,8 @@ class WordCategorizer:
                 masks_pos = rand.sample(range(1, len(tokenized_sent) - 1), num_masks)  # Don't mask boundary tokens
                 for mask_pos in masks_pos:
                     # Calculate sentence probability for each word in current masked position
-                    sent_row = [self.process_sentence(tokenized_sent, word, mask_pos, verbose=verbose) for word in
+                    print(f"Evaluating sentence {tokenized_sent} with mask in pos {mask_pos}")
+                    sent_row = [self.process_sentence(tokenized_sent[:], word, mask_pos, verbose=verbose) for word in
                                 self.vocab]
                     self.matrix.append(sent_row)
                     num_sents += 1
@@ -69,6 +74,7 @@ class WordCategorizer:
         if method != 'KMeans':
             print("Method not implemented... using KMeans instead")
 
+        print("Clustering word-sense vectors")
         k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
         estimator = KMeans(n_clusters=k, n_jobs=4)
         estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
@@ -81,7 +87,7 @@ class WordCategorizer:
         :param labels:         Cluster labels
         """
         num_clusters = max(labels) + 1
-        print(f"Num clusters: {num_clusters}")
+        print(f"Writing {num_clusters} clusters to file")
 
         # Write word categories to file
         save_to = save_to + "_KMeans_k" + str(num_clusters)
@@ -101,7 +107,10 @@ class WordCategorizer:
 
 
 if __name__ == '__main__':
-    wc = WordCategorizer('../vocabularies/minitest.vocab')
-    wc.populate_matrix('../sentences/3sentences.txt', verbose=False)
-    cluster_labels = wc.cluster_words(k=2)
-    wc.write_clusters('test', cluster_labels)
+    for _ in tqdm(range(1)):
+        wc = WordCategorizer('../vocabularies/test.vocab', pretrained_model='bert-base-uncased')
+        wc.populate_matrix('../sentences/9sentences.txt', num_masks=3, verbose=False)
+        cluster_labels = wc.cluster_words(method='KMeans', k=5)
+        wc.write_clusters('test', cluster_labels)
+        print(wc.matrix)
+
