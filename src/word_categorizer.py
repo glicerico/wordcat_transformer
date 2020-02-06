@@ -4,7 +4,7 @@ import random as rand
 from sklearn.cluster import KMeans, DBSCAN
 
 # My modules
-from src import BertLM
+from src.BertLM import BertLM
 
 
 class WordCategorizer:
@@ -104,4 +104,4 @@ if __name__ == '__main__':
     wc = WordCategorizer('../vocabularies/minitest.vocab')
     wc.populate_matrix('../sentences/3sentences.txt', verbose=False)
     cluster_labels = wc.cluster_words(k=2)
-    wc.write_clusters('../workdir/test', cluster_labels)
+    wc.write_clusters('test', cluster_labels)
