@@ -17,7 +17,7 @@ class WordCategorizer:
 
         self.vocab = []
         self.load_vocabulary(vocab_filename)
-        self.matrix = []  # Stores sent probability for each sentence-word pair (rows are sentences)
+        self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
 
     def load_vocabulary(self, vocab_filename):
         """
@@ -43,12 +43,13 @@ class WordCategorizer:
                 tokenized_sent = self.Bert_Model.tokenize_sent(sent)
                 masks_pos = rand.sample(range(1, len(tokenized_sent) - 1), num_masks)  # Don't mask boundary tokens
                 for mask_pos in masks_pos:
+                    # Calculate sentence probability for each word in current masked position
                     sent_row = [self.process_sentence(tokenized_sent, word, mask_pos, verbose=verbose) for word in
                                 self.vocab]
                     self.matrix.append(sent_row)
                     num_sents += 1
 
-            # self.matrix = np.reshape(self.matrix, (round(len(self.matrix)/len(self.vocab)), len(self.vocab)))
+        self.matrix = np.array(self.matrix).T  # Make rows be word-senses
 
     def process_sentence(self, tokenized_sent, word, mask_pos, verbose=False):
         """
@@ -70,7 +71,7 @@ class WordCategorizer:
 
         k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
         estimator = KMeans(n_clusters=k, n_jobs=4)
-        estimator.fit(np.array(self.matrix).T)  # Transpose matrix to cluster words, not sentences
+        estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
         return estimator.labels_
 
     def write_clusters(self, save_to, labels):
@@ -83,6 +84,7 @@ class WordCategorizer:
         print(f"Num clusters: {num_clusters}")
 
         # Write word categories to file
+        save_to = save_to + "_KMeans_k" + str(num_clusters)
         if not os.path.exists(save_to):
             os.makedirs(save_to)
         with open(save_to + '/categories.txt', "w") as fo:
@@ -102,4 +104,4 @@ if __name__ == '__main__':
     wc = WordCategorizer('../vocabularies/minitest.vocab')
     wc.populate_matrix('../sentences/3sentences.txt', verbose=False)
     cluster_labels = wc.cluster_words(k=2)
-    wc.write_clusters('test', cluster_labels, verbose=True)
+    wc.write_clusters('../workdir/test', cluster_labels)
