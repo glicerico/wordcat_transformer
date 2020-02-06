@@ -312,7 +312,7 @@ class WordSenseModel:
 
     def write_clusters(self, fl, save_dir, word, labels):
         """
-        Perform the clustering and writing results to file
+        Write clustering results to file
         :param fl:              handle for logging file
         :param save_dir:        Directory to save disambiguated senses
         :param word:            Current word to disambiguate

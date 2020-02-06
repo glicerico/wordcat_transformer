@@ -54,7 +54,7 @@ class BertLM:
         where N is the number of words in the sentence, and each P(w_i|...) is given by a transformer masked
         word prediction.
         Hence, one sentence probability requires N masked word prediction evaluations.
-        :param sentence: Input sentence
+        :param tokenized_input: Input sentence
         :param verbose: Print information about the obtained probabilities or not.
         :return: Sentence probability normalized by sentence length
         """

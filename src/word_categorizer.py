@@ -1,5 +1,6 @@
 import numpy as np
 import random as rand
+from sklearn.cluster import KMeans, DBSCAN
 
 # My modules
 from src import BertLM
@@ -39,13 +40,14 @@ class WordCategorizer:
         with open(sents_filename, 'r') as fs:
             for sent in fs:
                 tokenized_sent = self.Bert_Model.tokenize_sent(sent)
-                masks_pos = rand.sample(range(1, len(tokenized_sent) + 1), num_masks)  # Don't mask boundary tokens
+                masks_pos = rand.sample(range(1, len(tokenized_sent) - 1), num_masks)  # Don't mask boundary tokens
                 for mask_pos in masks_pos:
-                    sent_row = [self.process_sentence(tokenized_sent, word, mask_pos, verbose=verbose) for word in self.vocab]
-                    self.matrix.extend(sent_row)
+                    sent_row = [self.process_sentence(tokenized_sent, word, mask_pos, verbose=verbose) for word in
+                                self.vocab]
+                    self.matrix.append(sent_row)
                     num_sents += 1
 
-            self.matrix = np.reshape(self.matrix, (round(len(self.matrix)/len(self.vocab)), len(self.vocab)))
+            # self.matrix = np.reshape(self.matrix, (round(len(self.matrix)/len(self.vocab)), len(self.vocab)))
 
     def process_sentence(self, tokenized_sent, word, mask_pos, verbose=False):
         """
@@ -53,6 +55,7 @@ class WordCategorizer:
         :param tokenized_sent: Input sentence
         :param word: Input word
         :param mask_pos: Position to replace input word
+        :param verbose:
         :return:
         """
         tokenized_sent[mask_pos] = word
@@ -60,9 +63,18 @@ class WordCategorizer:
 
         return curr_prob
 
+    def cluster_words(self, method='KMeans', **kwargs):
+        if method != 'KMeans':
+            print("Method not implemented... using KMeans instead")
+
+        k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
+        estimator = KMeans(n_clusters=k, n_jobs=4)
+        estimator.fit(self.matrix)
+        return estimator.labels_
+
 
 if __name__ == '__main__':
-    wc = WordCategorizer('../vocabularies/test.vocab')
-    wc.populate_matrix('../sentences/9sentences.txt', verbose=True)
+    wc = WordCategorizer('../vocabularies/minitest.vocab')
+    wc.populate_matrix('../sentences/3sentences.txt', verbose=True)
     print(wc.matrix)
-
+    labels = wc.cluster_words(k=4)
