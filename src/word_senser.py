@@ -143,7 +143,6 @@ class WordSenseModel:
         :param corpus_file
         """
         try:
-
             with open(pickle_file_name, 'rb') as h:
                 _data = pickle.load(h)
                 self.sentences = _data[0]
@@ -154,7 +153,6 @@ class WordSenseModel:
                 print("EMBEDDINGS FOUND!")
 
         except:
-
             print("Embedding File Not Found!! \n")
             print("Performing first pass...")
 

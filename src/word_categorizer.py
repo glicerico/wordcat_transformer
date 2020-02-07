@@ -1,14 +1,29 @@
+import argparse
 import os
+import pickle
+
 import numpy as np
 import random as rand
 from sklearn.cluster import KMeans, DBSCAN
 from tqdm import tqdm
+from scipy import sparse
 
 # My modules
 from src.BertLM import BertLM
 
 
 class WordCategorizer:
+    def __init__(self, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
+
+        self.device_number = device_number
+        self.use_cuda = use_cuda
+
+        print("Loading BERT model...")
+        self.Bert_Model = BertLM(pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
+
+        self.vocab = []
+        self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
+
     def __init__(self, vocab_filename, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
 
         self.device_number = device_number
@@ -30,6 +45,37 @@ class WordCategorizer:
         """
         with open(vocab_filename, 'r') as fv:
             self.vocab = fv.read().splitlines()
+
+    def load_matrix(self, vocab_filename, sentences_filename, pickle_filename, num_masks=1, verbose=False):
+        """
+        If pickle file is present, load data; else, calculate it.
+        This method:
+        :param sentences
+        :param pickle_file_name
+        """
+        try:
+            with open(pickle_filename, 'rb') as h:
+                wc = WordCategorizer()
+                _data = pickle.load(h)
+                self.vocab = _data[1]
+                self.matrix = _data[2]
+                self.Bert_Model = _data[3]
+
+                print("MATRIX FOUND!")
+
+        except:
+            print("MATRIX File Not Found!! \n")
+            print("Performing matrix calculation...")
+
+            wc = WordCategorizer(vocab_filename, pretrained_model=args.pretrained)
+            wc.populate_matrix(sentences_filename, num_masks=num_masks, verbose=verbose)
+
+            with open(pickle_filename, 'wb') as h:
+                _data = (self.vocab, self.matrix, self.Bert_Model)
+                pickle.dump(_data, h)
+
+            print("Data stored in " + pickle_file_name)
+            return wc
 
     def populate_matrix(self, sents_filename, num_masks=1, verbose=False):
         """
@@ -55,6 +101,9 @@ class WordCategorizer:
                     num_sents += 1
 
         self.matrix = np.array(self.matrix).T  # Make rows be word-senses
+        self.matrix = self.matrix*(self.matrix > 3)
+        self.matrix = sparse.coo_matrix(self.matrix)
+
 
     def process_sentence(self, tokenized_sent, word, mask_pos, verbose=False):
         """
@@ -77,7 +126,7 @@ class WordCategorizer:
         print("Clustering word-sense vectors")
         k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
         estimator = KMeans(n_clusters=k, n_jobs=4)
-        estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
+        estimator.fit(self.matrix.tocsr())  # Transpose matrix to cluster words, not sentences
         return estimator.labels_
 
     def write_clusters(self, save_to, labels):
@@ -107,10 +156,29 @@ class WordCategorizer:
 
 
 if __name__ == '__main__':
-    for _ in tqdm(range(1)):
-        wc = WordCategorizer('../vocabularies/test.vocab', pretrained_model='bert-base-uncased')
-        wc.populate_matrix('../sentences/9sentences.txt', num_masks=3, verbose=False)
-        cluster_labels = wc.cluster_words(method='KMeans', k=5)
-        wc.write_clusters('test', cluster_labels)
-        print(wc.matrix)
 
+    parser = argparse.ArgumentParser(description='WSD using BERT')
+    parser.add_argument('--no_cuda', action='store_false', help='Use GPU?')
+    parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
+    parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
+    parser.add_argument('--vocab', type=str, required=True, help='Vocabulary Corpus')
+    parser.add_argument('--threshold', type=int, default=1, help='Min freq of word to be disambiguated')
+    parser.add_argument('--masks', type=int, default=1, help='Min freq of word to be disambiguated')
+    parser.add_argument('--clusterer', type=str, default='KMeans', help='Clustering method to use')
+    parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use in KMeans')
+    parser.add_argument('--end_k', type=int, default=10, help='Final number of clusters to use in KMeans')
+    parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
+    parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
+    parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
+    parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
+                                                                               'Embeddings to file')
+
+    args = parser.parse_args()
+
+    wc = self.load_matrix()
+
+    print("Start disambiguation...")
+    for k in tqdm(range(args.start_k, args.end_k + 1, args.step_k)):
+        cluster_labels = wc.cluster_words(method=args.clusterer, k=k)
+        wc.write_clusters(args.save_to, cluster_labels)
+        print(wc.matrix)

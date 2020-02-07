@@ -349,10 +349,12 @@ Some notes:
 - Start with simple English vocab (some files in [vocabularies](vocabularies))
 - Start with small number of sentences.
 - Probably should use sparse vectors and assign very low sentence probs
- (below some threshold) as zeros.
+ (below some threshold) as zeros: ~~TODO~~ Done, but doesn't seem to make
+ a lot of difference.
  ~~Need to make sure that clustering can handle sparse vectors, or else~~
  - ~~Should~~ Could implement Clark-style clustering algo.
  - Currently, I don't think it's worth to reuse BERT evaluations for 
  different words... I think saved processing time is small compared to
  added algorithm complexity
  - How to deal with sub-words? Both for probabilities and for substitution
+ 
