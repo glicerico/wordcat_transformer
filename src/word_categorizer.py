@@ -24,19 +24,6 @@ class WordCategorizer:
         self.vocab = []
         self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
 
-    def __init__(self, vocab_filename, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
-
-        self.device_number = device_number
-        self.use_cuda = use_cuda
-
-        print("Loading BERT model...")
-        self.Bert_Model = BertLM(pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
-
-        self.vocab = []
-        print("Loading vocabulary...")
-        self.load_vocabulary(vocab_filename)
-        self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
-
     def load_vocabulary(self, vocab_filename):
         """
         Reads vocabulary file. File format must be one word per line, no comments accepted.
@@ -55,11 +42,10 @@ class WordCategorizer:
         """
         try:
             with open(pickle_filename, 'rb') as h:
-                wc = WordCategorizer()
                 _data = pickle.load(h)
-                self.vocab = _data[1]
-                self.matrix = _data[2]
-                self.Bert_Model = _data[3]
+                self.vocab = _data[0]
+                self.matrix = _data[1]
+                self.Bert_Model = _data[2]
 
                 print("MATRIX FOUND!")
 
@@ -67,15 +53,14 @@ class WordCategorizer:
             print("MATRIX File Not Found!! \n")
             print("Performing matrix calculation...")
 
-            wc = WordCategorizer(vocab_filename, pretrained_model=args.pretrained)
-            wc.populate_matrix(sentences_filename, num_masks=num_masks, verbose=verbose)
+            self.load_vocabulary(vocab_filename)
+            self.populate_matrix(sentences_filename, num_masks=num_masks, verbose=verbose)
 
             with open(pickle_filename, 'wb') as h:
                 _data = (self.vocab, self.matrix, self.Bert_Model)
                 pickle.dump(_data, h)
 
-            print("Data stored in " + pickle_file_name)
-            return wc
+            print("Data stored in " + pickle_filename)
 
     def populate_matrix(self, sents_filename, num_masks=1, verbose=False):
         """
@@ -101,8 +86,8 @@ class WordCategorizer:
                     num_sents += 1
 
         self.matrix = np.array(self.matrix).T  # Make rows be word-senses
-        self.matrix = self.matrix*(self.matrix > 3)
-        self.matrix = sparse.coo_matrix(self.matrix)
+        self.matrix = self.matrix*(self.matrix < -4)
+        self.matrix = sparse.csr_matrix(self.matrix)
 
 
     def process_sentence(self, tokenized_sent, word, mask_pos, verbose=False):
@@ -126,7 +111,7 @@ class WordCategorizer:
         print("Clustering word-sense vectors")
         k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
         estimator = KMeans(n_clusters=k, n_jobs=4)
-        estimator.fit(self.matrix.tocsr())  # Transpose matrix to cluster words, not sentences
+        estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
         return estimator.labels_
 
     def write_clusters(self, save_to, labels):
@@ -175,10 +160,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    wc = self.load_matrix()
+    wc = WordCategorizer()
+    wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False)
 
     print("Start disambiguation...")
-    for k in tqdm(range(args.start_k, args.end_k + 1, args.step_k)):
-        cluster_labels = wc.cluster_words(method=args.clusterer, k=k)
+    for curr_k in tqdm(range(args.start_k, args.end_k + 1, args.step_k)):
+        print(f"Clustering with k={curr_k}")
+        cluster_labels = wc.cluster_words(method=args.clusterer, k=curr_k)
         wc.write_clusters(args.save_to, cluster_labels)
         print(wc.matrix)
