@@ -62,13 +62,14 @@ class WordCategorizer:
 
             print("Data stored in " + pickle_filename)
 
-    def populate_matrix(self, sents_filename, num_masks=1, verbose=False):
+    def populate_matrix(self, sents_filename, num_masks=1, sparse_thres=-4, verbose=False):
         """
         Calculates probability matrix for the sentence-word pairs
         Currently can only handle one mask per sentence. We can repeat sentences in the sents_file as
         a workaround to this.
         :param sents_filename:  File with input sentences
         :param num_masks:       Repetitions for each sentence, with different masks
+        :param sparse_thres:    If sentence prob is under this value, assign 0
         :return: None
         """
         print("Evaluating word-sentence probabilities")
@@ -80,13 +81,14 @@ class WordCategorizer:
                 for mask_pos in masks_pos:
                     # Calculate sentence probability for each word in current masked position
                     print(f"Evaluating sentence {tokenized_sent} with mask in pos {mask_pos}")
-                    sent_row = [self.process_sentence(tokenized_sent[:], word, mask_pos, verbose=verbose) for word in
-                                self.vocab]
+                    sent_row = np.array(
+                        [self.process_sentence(tokenized_sent[:], word, mask_pos, verbose=verbose) for word in
+                         self.vocab])
+                    sent_row = sent_row * (sent_row > sparse_thres)  # Cut low probability values
                     self.matrix.append(sent_row)
                     num_sents += 1
 
-        self.matrix = np.array(self.matrix).astype(np.float32).T  # Reduce matrix precision, make rows be word-senses
-        self.matrix = self.matrix*(self.matrix < -4)
+        self.matrix = np.array(self.matrix).astype(np.float32)  # Reduce matrix precision, make rows be word-senses
         self.matrix = sparse.csr_matrix(self.matrix.T)  # Convert to sparse matrix
 
     def process_sentence(self, tokenized_sent, word, mask_pos, verbose=False):
@@ -128,7 +130,6 @@ class WordCategorizer:
             os.makedirs(save_to)
         with open(save_to + '/categories.txt', "w") as fo:
             for i in range(-1, num_clusters):  # Also write unclustered words
-                # sense_members = [self.vocab_map[word][j] for j, k in enumerate(labels) if k == i]
                 cluster_members = [self.vocab[j] for j, k in enumerate(labels) if k == i]
                 fo.write(f"Cluster #{i}")
                 if len(cluster_members) > 0:  # Handle empty clusters
@@ -160,11 +161,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     wc = WordCategorizer()
-    wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False)
+    for _ in tqdm(range(1)):
+        wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False)
 
-    print("Start disambiguation...")
+    print("Start clustering...")
     for curr_k in tqdm(range(args.start_k, args.end_k + 1, args.step_k)):
         print(f"Clustering with k={curr_k}")
         cluster_labels = wc.cluster_words(method=args.clusterer, k=curr_k)
         wc.write_clusters(args.save_to, cluster_labels)
-        # print(wc.matrix)
