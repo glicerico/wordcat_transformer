@@ -85,10 +85,9 @@ class WordCategorizer:
                     self.matrix.append(sent_row)
                     num_sents += 1
 
-        self.matrix = np.array(self.matrix).T  # Make rows be word-senses
+        self.matrix = np.array(self.matrix).astype(np.float32).T  # Reduce matrix precision, make rows be word-senses
         self.matrix = self.matrix*(self.matrix < -4)
-        self.matrix = sparse.csr_matrix(self.matrix)
-
+        self.matrix = sparse.csr_matrix(self.matrix.T)  # Convert to sparse matrix
 
     def process_sentence(self, tokenized_sent, word, mask_pos, verbose=False):
         """
@@ -168,4 +167,4 @@ if __name__ == '__main__':
         print(f"Clustering with k={curr_k}")
         cluster_labels = wc.cluster_words(method=args.clusterer, k=curr_k)
         wc.write_clusters(args.save_to, cluster_labels)
-        print(wc.matrix)
+        # print(wc.matrix)

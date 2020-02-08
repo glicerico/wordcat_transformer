@@ -358,3 +358,12 @@ Some notes:
  added algorithm complexity
  - How to deal with sub-words? Both for probabilities and for substitution
  
+ **********
+ Need an evaluation measure for the word categories.
+ Following a [list of words by POS](https://www.english-grammar-revolution.com/word-lists.html),
+ I create a gold standard to evaluate the obtained categories.
+ Labeled words per category are in [POS](vocabularies/POS) directory.
+ The file [POS_unambiguous.vocab](vocabularies/POS_unambiguous.vocab)
+ contains these words, eliminating all words appearing in more than one
+ category, to avoid dealing with ambiguity for now.
+ 
