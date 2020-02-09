@@ -120,9 +120,9 @@ class WordCategorizer:
             estimator = KMeans(n_clusters=k, n_jobs=4)
             estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
         if method == 'DBSCAN':
-            eps = kwargs.get('eps', 0.5)
-            min_samples = kwargs.get('min_samples', 2)
-            estimator = DBSCAN(min_samples=min_samples, eps=eps, n_jobs=4)
+            eps = kwargs.get('k', 0.2)
+            min_samples = kwargs.get('min_samples', 5)
+            estimator = DBSCAN(min_samples=min_samples, eps=eps, n_jobs=4, metric='cosine')
             estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
         else:
             print("Method not implemented... using KMeans instead")
