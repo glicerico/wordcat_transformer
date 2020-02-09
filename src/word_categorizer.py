@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import os
 import pickle
 
@@ -23,6 +24,7 @@ class WordCategorizer:
 
         self.vocab = []
         self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
+        self.gold = []
 
     def load_vocabulary(self, vocab_filename):
         """
@@ -32,7 +34,10 @@ class WordCategorizer:
         """
         with open(vocab_filename, 'r') as fv:
             lines = fv.read().splitlines()
-            self.vocab = [l.split()[0] for l in lines]
+            for li in lines:
+                split_line = li.split()
+                self.vocab.append(split_line[0])  # Ignores POS labels if present
+                self.gold.append(split_line[-1])  # Saves gold standard labels if present
 
     def load_matrix(self, vocab_filename, sentences_filename, pickle_filename, num_masks=1, verbose=False):
         """
@@ -45,8 +50,9 @@ class WordCategorizer:
             with open(pickle_filename, 'rb') as h:
                 _data = pickle.load(h)
                 self.vocab = _data[0]
-                self.matrix = _data[1]
-                self.Bert_Model = _data[2]
+                self.gold = _data[1]
+                self.matrix = _data[2]
+                self.Bert_Model = _data[3]
 
                 print("MATRIX FOUND!")
 
@@ -58,7 +64,7 @@ class WordCategorizer:
             self.populate_matrix(sentences_filename, num_masks=num_masks, verbose=verbose)
 
             with open(pickle_filename, 'wb') as h:
-                _data = (self.vocab, self.matrix, self.Bert_Model)
+                _data = (self.vocab, self.gold, self.matrix, self.Bert_Model)
                 pickle.dump(_data, h)
 
             print("Data stored in " + pickle_filename)
@@ -110,7 +116,6 @@ class WordCategorizer:
         if method != 'KMeans':
             print("Method not implemented... using KMeans instead")
 
-        print("Clustering word-sense vectors")
         k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
         estimator = KMeans(n_clusters=k, n_jobs=4)
         estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
@@ -127,8 +132,8 @@ class WordCategorizer:
 
         # Write word categories to file
         append = "/KMeans_k" + str(num_clusters)
-        if not os.path.exists(save_to):
-            os.makedirs(save_to)
+        # if not os.path.exists(save_to):
+        #     os.makedirs(save_to)
         with open(save_to + append + '.wordcat', "w") as fo:
             for i in range(-1, num_clusters):  # Also write unclustered words
                 cluster_members = [self.vocab[j] for j, k in enumerate(labels) if k == i]
@@ -139,6 +144,29 @@ class WordCategorizer:
                     fo.write(']\n')
                 else:
                     fo.write(" is empty\n\n")
+
+    def eval_clusters(self, logfile, pred):
+        if self.gold == self.vocab:
+            print("Gold labels not present in vocabulary file. Can't evaluate!\n")
+            return
+        else:
+            true_pairs = self.get_pairs(np.array(self.gold))
+            pred_pairs = self.get_pairs(pred)
+            int_size = len(set(true_pairs).intersection(pred_pairs))
+            p = int_size / float(len(pred_pairs))
+            r = int_size / float(len(true_pairs))
+            f_score = 2 * p * r / float(p + r)
+            print(f"Fscore: {f_score}\n")
+            fl.write(f"FScore: {f_score}\n")
+
+    @staticmethod
+    def get_pairs(labels):
+        result = []
+        for label in np.unique(labels):
+            ulabels = np.where(labels == label)[0]
+            for p in itertools.combinations(ulabels, 2):
+                result.append(p)
+        return result
 
 
 if __name__ == '__main__':
@@ -158,7 +186,6 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
                                                                                'Embeddings to file')
-
     args = parser.parse_args()
 
     wc = WordCategorizer()
@@ -166,7 +193,13 @@ if __name__ == '__main__':
         wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False)
 
     print("Start clustering...")
-    for curr_k in tqdm(range(args.start_k, args.end_k + 1, args.step_k)):
-        print(f"Clustering with k={curr_k}")
-        cluster_labels = wc.cluster_words(method=args.clusterer, k=curr_k)
-        wc.write_clusters(args.save_to, cluster_labels)
+    if not os.path.exists(args.save_to):
+        os.makedirs(args.save_to)
+    with open(args.save_to + '/results.log', 'w') as fl:
+        for curr_k in tqdm(range(args.start_k, args.end_k + 1, args.step_k)):
+            print(f"Clustering with k={curr_k}")
+            cluster_labels = wc.cluster_words(method=args.clusterer, k=curr_k)
+            wc.write_clusters(args.save_to, cluster_labels)
+            print(f"\nEvaluation for {curr_k} clusters")
+            fl.write(f"Evaluation for {curr_k} clusters\n")
+            wc.eval_clusters(fl, cluster_labels)
