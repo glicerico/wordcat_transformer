@@ -31,7 +31,8 @@ class WordCategorizer:
         :return:                None
         """
         with open(vocab_filename, 'r') as fv:
-            self.vocab = fv.read().splitlines()
+            lines = fv.read().splitlines()
+            self.vocab = [l.split()[0] for l in lines]
 
     def load_matrix(self, vocab_filename, sentences_filename, pickle_filename, num_masks=1, verbose=False):
         """
@@ -125,10 +126,10 @@ class WordCategorizer:
         print(f"Writing {num_clusters} clusters to file")
 
         # Write word categories to file
-        save_to = save_to + "_KMeans_k" + str(num_clusters)
+        append = "/KMeans_k" + str(num_clusters)
         if not os.path.exists(save_to):
             os.makedirs(save_to)
-        with open(save_to + '/categories.txt', "w") as fo:
+        with open(save_to + append + '.wordcat', "w") as fo:
             for i in range(-1, num_clusters):  # Also write unclustered words
                 cluster_members = [self.vocab[j] for j, k in enumerate(labels) if k == i]
                 fo.write(f"Cluster #{i}")
