@@ -1,19 +1,19 @@
-book
-picture
-cat
-dog
-mother
-boyfriend
-Rome
-pen
-bottle
-small
-sick
-great
-red
-the
-a
-some
-slowly
-have
-went
+book	noun
+picture	noun
+cat	noun
+dog	noun
+mother	noun
+boyfriend	noun
+Rome	noun
+pen	noun
+bottle	noun
+small	adj
+sick	adj
+great	adj
+red	adj
+the	det
+a	det
+some	det
+slowly	adv
+have	verb
+went	verb
