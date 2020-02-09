@@ -2,6 +2,7 @@ import argparse
 import itertools
 import os
 import pickle
+import sys
 
 import numpy as np
 import random as rand
@@ -10,7 +11,8 @@ from tqdm import tqdm
 from scipy import sparse
 
 # My modules
-from src.BertLM import BertLM
+sys.path.insert(0, os.path.abspath('../src'))
+from BertLM import BertLM
 
 
 class WordCategorizer:
@@ -182,7 +184,6 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
     parser.add_argument('--vocab', type=str, required=True, help='Vocabulary Corpus')
-    parser.add_argument('--threshold', type=int, default=1, help='Min freq of word to be disambiguated')
     parser.add_argument('--masks', type=int, default=1, help='Min freq of word to be disambiguated')
     parser.add_argument('--clusterer', type=str, default='KMeans', help='Clustering method to use')
     parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use in KMeans')
