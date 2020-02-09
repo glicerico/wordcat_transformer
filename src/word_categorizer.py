@@ -186,9 +186,9 @@ if __name__ == '__main__':
     parser.add_argument('--vocab', type=str, required=True, help='Vocabulary Corpus')
     parser.add_argument('--masks', type=int, default=1, help='Min freq of word to be disambiguated')
     parser.add_argument('--clusterer', type=str, default='KMeans', help='Clustering method to use')
-    parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use in KMeans')
-    parser.add_argument('--end_k', type=int, default=10, help='Final number of clusters to use in KMeans')
-    parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
+    parser.add_argument('--start_k', type=int, default=10, help='Initial value of clustering param')
+    parser.add_argument('--end_k', type=int, default=10, help='Final value of clustering param')
+    parser.add_argument('--step_k', type=int, default=5, help='Step for clustering param exploration')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
