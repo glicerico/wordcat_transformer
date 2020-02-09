@@ -113,25 +113,31 @@ class WordCategorizer:
         return curr_prob
 
     def cluster_words(self, method='KMeans', **kwargs):
-        if method != 'KMeans':
+        if method == 'KMeans':
+            k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
+            estimator = KMeans(n_clusters=k, n_jobs=4)
+            estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
+        if method == 'DBSCAN':
+            eps = kwargs.get('eps', 0.5)
+            min_samples = kwargs.get('min_samples', 2)
+            estimator = DBSCAN(min_samples=min_samples, eps=eps, n_jobs=4)
+            estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
+        else:
             print("Method not implemented... using KMeans instead")
-
-        k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
-        estimator = KMeans(n_clusters=k, n_jobs=4)
-        estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
         return estimator.labels_
 
-    def write_clusters(self, save_to, labels):
+    def write_clusters(self, method, save_to, labels):
         """
         Write clustering results to file
         :param save_to:        Directory to save disambiguated senses
         :param labels:         Cluster labels
+        :param method:         Clustering method used
         """
         num_clusters = max(labels) + 1
         print(f"Writing {num_clusters} clusters to file")
 
         # Write word categories to file
-        append = "/KMeans_k" + str(num_clusters)
+        append = "/" + method + "_" + str(num_clusters)
         # if not os.path.exists(save_to):
         #     os.makedirs(save_to)
         with open(save_to + append + '.wordcat', "w") as fo:
@@ -198,8 +204,8 @@ if __name__ == '__main__':
     with open(args.save_to + '/results.log', 'w') as fl:
         for curr_k in tqdm(range(args.start_k, args.end_k + 1, args.step_k)):
             print(f"Clustering with k={curr_k}")
-            cluster_labels = wc.cluster_words(method=args.clusterer, k=curr_k)
-            wc.write_clusters(args.save_to, cluster_labels)
+            cluster_labels = wc.cluster_words(args.clusterer, k=curr_k)
+            wc.write_clusters(args.clusterer, args.save_to, cluster_labels)
             print(f"\nEvaluation for {curr_k} clusters")
             fl.write(f"Evaluation for {curr_k} clusters\n")
             wc.eval_clusters(fl, cluster_labels)
