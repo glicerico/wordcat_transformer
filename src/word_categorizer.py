@@ -87,7 +87,9 @@ class WordCategorizer:
         with open(sents_filename, 'r') as fs:
             for sent in fs:
                 tokenized_sent = self.Bert_Model.tokenize_sent(sent)
-                masks_pos = rand.sample(range(1, len(tokenized_sent) - 1), num_masks)  # Don't mask boundary tokens
+                len_sent = len(tokenized_sent)
+                # Don't mask boundary tokens, sample same sentence with various masks (less than length of sent)
+                masks_pos = rand.sample(range(1, len_sent - 1), min(len_sent - 2, num_masks))
                 for mask_pos in masks_pos:
                     # Calculate sentence probability for each word in current masked position
                     print(f"Evaluating sentence {tokenized_sent} with mask in pos {mask_pos}")
