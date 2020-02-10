@@ -41,7 +41,7 @@ class WordCategorizer:
                 self.vocab.append(split_line[0])  # Ignores POS labels if present
                 self.gold.append(split_line[-1])  # Saves gold standard labels if present
 
-    def load_matrix(self, vocab_filename, sentences_filename, pickle_filename, num_masks=1, verbose=False):
+    def load_matrix(self, vocab_filename, sentences_filename, pickle_filename, num_masks=1, verbose=False, sparse_thres=-8):
         """
         If pickle file is present, load data; else, calculate it.
         This method:
@@ -64,7 +64,7 @@ class WordCategorizer:
             print("Performing matrix calculation...")
 
             self.load_vocabulary(vocab_filename)
-            self.populate_matrix(sentences_filename, num_masks=num_masks, verbose=verbose)
+            self.populate_matrix(sentences_filename, num_masks=num_masks, verbose=verbose, sparse_thres=sparse_thres)
 
             with open(pickle_filename, 'wb') as h:
                 _data = (self.vocab, self.gold, self.matrix, self.Bert_Model)
@@ -189,10 +189,11 @@ if __name__ == '__main__':
     parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
     parser.add_argument('--vocab', type=str, required=True, help='Vocabulary Corpus')
     parser.add_argument('--masks', type=int, default=1, help='Min freq of word to be disambiguated')
+    parser.add_argument('--sparse_thres', type=int, default=-8, help='Low log(prob) cut')
     parser.add_argument('--clusterer', type=str, default='KMeans', help='Clustering method to use')
     parser.add_argument('--start_k', type=float, default=10, help='Initial value of clustering param')
     parser.add_argument('--end_k', type=float, default=10, help='Final value of clustering param')
-    parser.add_argument('--steps_k', type=float, default=5, help='Step for clustering param exploration')
+    parser.add_argument('--steps_k', type=int, default=5, help='Step for clustering param exploration')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
@@ -201,7 +202,7 @@ if __name__ == '__main__':
 
     wc = WordCategorizer()
     for _ in tqdm(range(1)):
-        wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False)
+        wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False, sparse_thres=args.sparse_thres)
 
     print("Start clustering...")
     if not os.path.exists(args.save_to):
