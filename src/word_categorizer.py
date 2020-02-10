@@ -57,6 +57,7 @@ class WordCategorizer:
                 self.Bert_Model = _data[3]
 
                 print("MATRIX FOUND!")
+                print(self.matrix)
 
         except:
             print("MATRIX File Not Found!! \n")
@@ -117,18 +118,19 @@ class WordCategorizer:
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':
             k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
-            estimator = KMeans(n_clusters=k, n_jobs=4)
+            estimator = KMeans(n_clusters=int(k), n_jobs=4)
             estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
-        if method == 'DBSCAN':
+        elif method == 'DBSCAN':
             eps = kwargs.get('k', 0.2)
-            min_samples = kwargs.get('min_samples', 5)
+            min_samples = kwargs.get('min_samples', 3)
             estimator = DBSCAN(min_samples=min_samples, eps=eps, n_jobs=4, metric='cosine')
             estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
         else:
-            print("Method not implemented... using KMeans instead")
+            print("Clustering method not implemented...")
+            exit(1)
         return estimator.labels_
 
-    def write_clusters(self, method, save_to, labels):
+    def write_clusters(self, method, save_to, labels, clust_param):
         """
         Write clustering results to file
         :param save_to:        Directory to save disambiguated senses
@@ -139,7 +141,7 @@ class WordCategorizer:
         print(f"Writing {num_clusters} clusters to file")
 
         # Write word categories to file
-        append = "/" + method + "_" + str(num_clusters)
+        append = "/" + method + "_" + str(clust_param)
         # if not os.path.exists(save_to):
         #     os.makedirs(save_to)
         with open(save_to + append + '.wordcat', "w") as fo:
@@ -186,9 +188,9 @@ if __name__ == '__main__':
     parser.add_argument('--vocab', type=str, required=True, help='Vocabulary Corpus')
     parser.add_argument('--masks', type=int, default=1, help='Min freq of word to be disambiguated')
     parser.add_argument('--clusterer', type=str, default='KMeans', help='Clustering method to use')
-    parser.add_argument('--start_k', type=int, default=10, help='Initial value of clustering param')
-    parser.add_argument('--end_k', type=int, default=10, help='Final value of clustering param')
-    parser.add_argument('--step_k', type=int, default=5, help='Step for clustering param exploration')
+    parser.add_argument('--start_k', type=float, default=10, help='Initial value of clustering param')
+    parser.add_argument('--end_k', type=float, default=10, help='Final value of clustering param')
+    parser.add_argument('--steps_k', type=float, default=5, help='Step for clustering param exploration')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
@@ -203,10 +205,10 @@ if __name__ == '__main__':
     if not os.path.exists(args.save_to):
         os.makedirs(args.save_to)
     with open(args.save_to + '/results.log', 'w') as fl:
-        for curr_k in tqdm(range(args.start_k, args.end_k + 1, args.step_k)):
+        for curr_k in tqdm(np.linspace(args.start_k, args.end_k, args.steps_k)):
             print(f"Clustering with k={curr_k}")
-            cluster_labels = wc.cluster_words(args.clusterer, k=curr_k)
-            wc.write_clusters(args.clusterer, args.save_to, cluster_labels)
-            print(f"\nEvaluation for {curr_k} clusters")
-            fl.write(f"Evaluation for {curr_k} clusters\n")
+            cluster_labels = wc.cluster_words(method=args.clusterer, k=curr_k)
+            wc.write_clusters(args.clusterer, args.save_to, cluster_labels, curr_k)
+            print(f"\nEvaluation for k={curr_k}")
+            fl.write(f"Evaluation for k={curr_k}\n")
             wc.eval_clusters(fl, cluster_labels)
