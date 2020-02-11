@@ -120,7 +120,7 @@ class WordCategorizer:
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':
             k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
-            estimator = KMeans(n_clusters=int(k), n_jobs=4)
+            estimator = KMeans(n_clusters=int(k), n_jobs=4, n_init=10)
             estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
         elif method == 'DBSCAN':
             eps = kwargs.get('k', 0.2)
