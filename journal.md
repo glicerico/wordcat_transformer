@@ -367,3 +367,73 @@ Some notes:
  contains these words, eliminating all words appearing in more than one
  category, to avoid dealing with ambiguity for now.
  
+ ***********
+ Actually, ambiguity is still present in the above, as some words appearing
+ in the lists can be used as different POS, and they are clustered only
+ in a single category, i.e. `match` and `love` get normally clustered together with
+ nouns, instead of verbs.
+ We should handle ambiguity to more properly evaluate the clustering.
+ 
+ Clustering must be done carefully.
+ The standard k-means does quite a decent job for a number of clusters 
+ similar to the number of expected POS in the gold standard.
+ On the other hand, DBSCAN is very sensitive to the `eps` parameter
+ which decides the density of the clusters.
+ If `eps` changes a bit outside of the optimal value, all words get 
+ clustered in the same cluster, or not clustered at all.
+ DBSCAN doesn't seem so robust in this sense.
+ Keep in mind to implement Clark-clustering?
+ 
+ I wonder if this is also related to having "a few" features (less than 190
+ for the current experiments: 19 sentences with at most 10 masks).
+ 
+******************
+
+Using the OPTICS algorithm with default values gives a different type of
+clustering: a lot of words are left unclustered (cluster -1), but
+the formed clusters are quite good, if small.
+Example:
+```
+Cluster #-1:
+[airline, am, and, anyone, around, as, asian, at, audience, away, baby, badly, band, bed, between, brutally, building, but, by, christian, clock, country, cut, daily, did, do, drive, during, eat, entire, extremely, family, few, final, flowers, fly, french, from, go, grimly, grow, has, have, history, house, it, little, make, man, may, most, mountain, movie, music, never, none, ocean, off, of, on, or, organized, phone, play, pregnant, pretty, quite, sleep, socks, something, soon, state, stop, sunlight, swim, than, themselves, though, too, to, train, up, upstairs, urgently, very, village, walk, weekly, well, what, which, while, will, with, work, write, yesterday, yet, you, ]
+Cluster #0:
+[above, behind, below, beside, under, ]
+Cluster #1:
+[across, onto, through, ]
+Cluster #2:
+[everywhere, here, somewhere, there, ]
+Cluster #3:
+[carefully, eagerly, happily, quickly, quietly, ]
+Cluster #4:
+[australia, eyeglasses, kilimanjaro, lazily, santiago, ]
+Cluster #5:
+[banana, milk, rain, rice, snow, violin, ]
+Cluster #6:
+[bird, cat, dog, ]
+Cluster #7:
+[book, match, photograph, ]
+Cluster #8:
+[happiness, love, wealth, ]
+Cluster #9:
+[myself, yourself, yours, ]
+Cluster #10:
+[bad, clean, cold, dry, funny, good, hot, sharp, ]
+Cluster #11:
+[him, me, them, ]
+Cluster #12:
+[become, been, be, seem, ]
+Cluster #13:
+[because, if, once, until, when, where, ]
+Cluster #14:
+[whoever, whom, who, ]
+Cluster #15:
+[i, she, they, we, ]
+Cluster #16:
+[can, must, should, ]
+Cluster #17:
+[some, these, this, ]
+Cluster #18:
+[her, his, my, ]
+Cluster #19:
+[are, is, was, ]
+```
