@@ -6,7 +6,7 @@ import sys
 
 import numpy as np
 import random as rand
-from sklearn.cluster import KMeans, DBSCAN
+from sklearn.cluster import KMeans, DBSCAN, OPTICS
 from tqdm import tqdm
 from scipy import sparse
 
@@ -121,15 +121,20 @@ class WordCategorizer:
         if method == 'KMeans':
             k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
             estimator = KMeans(n_clusters=int(k), n_jobs=4, n_init=10)
-            estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
+            estimator.fit(self.matrix)  # Cluster matrix
         elif method == 'DBSCAN':
             eps = kwargs.get('k', 0.2)
             min_samples = kwargs.get('min_samples', 3)
             estimator = DBSCAN(min_samples=min_samples, eps=eps, n_jobs=4, metric='cosine')
-            estimator.fit(self.matrix)  # Transpose matrix to cluster words, not sentences
+            estimator.fit(self.matrix)  # Cluster matrix
+        elif method == 'OPTICS':
+            estimator = OPTICS(min_samples=3, metric='cosine', xi=0.02, n_jobs=4)
+            estimator.fit(self.matrix.toarray())  # Cluster matrix
         else:
             print("Clustering method not implemented...")
             exit(1)
+
+
         return estimator.labels_
 
     def write_clusters(self, method, save_to, labels, clust_param):
