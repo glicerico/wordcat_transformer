@@ -20,14 +20,15 @@ warnings.filterwarnings('ignore')
 
 class BERT:
 
-    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
+    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, output_hidden_states=True):
         self.device_number = device_number
         self.use_cuda = use_cuda
 
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
 
-        self.model = BertModel.from_pretrained(pretrained_model, output_hidden_states=True)
-        self.model.eval()
+        self.model = BertModel.from_pretrained(pretrained_model, output_hidden_states=output_hidden_states)
+        with torch.no_grad():
+            self.model.eval()
 
         if use_cuda:
             self.model.to(device_number)
@@ -142,7 +143,6 @@ class WordSenseModel:
         :param corpus_file
         """
         try:
-
             with open(pickle_file_name, 'rb') as h:
                 _data = pickle.load(h)
                 self.sentences = _data[0]
@@ -153,7 +153,6 @@ class WordSenseModel:
                 print("EMBEDDINGS FOUND!")
 
         except:
-
             print("Embedding File Not Found!! \n")
             print("Performing first pass...")
 
@@ -311,7 +310,7 @@ class WordSenseModel:
 
     def write_clusters(self, fl, save_dir, word, labels):
         """
-        Perform the clustering and writing results to file
+        Write clustering results to file
         :param fl:              handle for logging file
         :param save_dir:        Directory to save disambiguated senses
         :param word:            Current word to disambiguate

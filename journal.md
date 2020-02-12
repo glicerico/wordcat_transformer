@@ -254,3 +254,186 @@ In this example, 6 clusters seems like the best result with the above sentences.
  all "high" words in every member of a cluster go into it.
  - Handle sub-words in sentences
  ~~- Try with large bert model~~
+ 
+ ********
+ Also tried masking every word in the above sentences and clustering that way.
+ Results can be found in [wordcat_funcs.ipynb](notebooks/wordcat_funcs.ipynb).
+ The categories are not as crisp and in the former, simpler case... they
+ contain some noisy results.
+ 
+ ********
+ ## Feb 2020
+
+After reporting the clustering results above, Ben pointed out that the idea
+he had in mind is different.
+I was clustering sentences, and obtaining the word categories from them in
+a way that circumvents WSD.
+However, as Ben noted, this won't work in general, as you can have 
+syntactically different predictions from the logit vectors:
+```
+Sentence:
+The fat cat [MASK] the mouse.
+Ordered top predicted tokens: ['.', 'and', ',', 'or', ';']
+Ordered top predicted values: [0.5628975  0.32685623 0.05045042 0.00994903 0.0039914 ]
+```
+
+Instead, Ben proposes to fill the sentence-word matrix with the probabilities
+of the given masked sentence, if the mask is substituted by the given word.
+`P(S_i|W)`: Probability of sentence `S_i`, which has one masked position, 
+if word W is placed instead of the mask.
+That is: `Ai_j = P(S_i|W=j)`
+This approach will require several more evaluations than the one I tried
+above (a factor of around `V*avg_l` more evaluations, where V is the size of the
+vocabulary, and `avg_l` is the average sentence length).
+However, it seems intuitive that his approach should work better.
+This approach would require a separate sense disambiguation, though... perhaps
+the one implemented in [word_senser.py](src/word_senser.py).
+
+********
+While reviewing code in [Bert_as_LM.ipynb](notebooks/Bert_as_LM.ipynb), I
+notice that the normalized sentence probability is taking the sentence length
+as the number of sub-words.
+For most words, the sub-words have normally quite high probability, so this
+may be biasing probabilities in favor of sentences with a high ratio of 
+sub-words.
+TODO: Maybe I should divide by the length of the sentence in words, not counting
+sub-words?
+
+Also, the probabilities of subworded words is much higher than regular
+words, because I'm masking one subword at a time, so the other subwords
+can have high probabilities because they fit well with the surrounding
+subwords, even if not too much with the rest of the sentence.
+Example:
+The sentence `This is a macrame` should have quite a low probability, but
+because of sub-words, it's actually quite high:
+```
+Processing sentence: ['[CLS]', 'this', 'is', 'a', 'mac', '##ram', '##e', '.', '[SEP]']
+['[CLS]', '[MASK]', 'is', 'a', 'mac', '##ram', '##e', '.', '[SEP]']
+Word: this 	 Prob: 0.06995750218629837
+Ordered top predicted tokens: ['it', 'this', 'there', 'he', 'that']
+Ordered top predicted values: [0.8618048  0.0699575  0.02746578 0.00282901 0.00164153]
+['[CLS]', 'this', '[MASK]', 'a', 'mac', '##ram', '##e', '.', '[SEP]']
+Word: is 	 Prob: 0.8059344291687012
+Ordered top predicted tokens: ['is', 'was', 'has', 'resembles', 'includes']
+Ordered top predicted values: [0.8059344  0.14677647 0.00251259 0.00214571 0.00181202]
+['[CLS]', 'this', 'is', '[MASK]', 'mac', '##ram', '##e', '.', '[SEP]']
+Word: a 	 Prob: 0.3107656240463257
+Ordered top predicted tokens: ['a', 'the', 'called', 'not', 'another']
+Ordered top predicted values: [0.31076562 0.24131534 0.1898963  0.01890805 0.01177635]
+['[CLS]', 'this', 'is', 'a', '[MASK]', '##ram', '##e', '.', '[SEP]']
+Word: mac 	 Prob: 0.4050573706626892
+Ordered top predicted tokens: ['mac', 'ce', 'side', 'cup', 'semi']
+Ordered top predicted values: [0.40505737 0.0790267  0.05402635 0.0435847  0.03299322]
+['[CLS]', 'this', 'is', 'a', 'mac', '[MASK]', '##e', '.', '[SEP]']
+Word: ##ram 	 Prob: 0.2340756058692932
+Ordered top predicted tokens: ['##ram', '##ula', '##out', '##abe', '##are']
+Ordered top predicted values: [0.2340756  0.13345419 0.10716671 0.05448193 0.03716443]
+['[CLS]', 'this', 'is', 'a', 'mac', '##ram', '[MASK]', '.', '[SEP]']
+Word: ##e 	 Prob: 0.7259987592697144
+Ordered top predicted tokens: ['##e', '##id', '##i', 'plant', 'virus']
+Ordered top predicted values: [0.72599876 0.0952542  0.03262086 0.01331557 0.00876465]
+['[CLS]', 'this', 'is', 'a', 'mac', '##ram', '##e', '[MASK]', '[SEP]']
+Word: . 	 Prob: 0.9112837910652161
+Ordered top predicted tokens: ['.', ';', '!', '?', '|']
+Ordered top predicted values: [9.1128379e-01 7.5437672e-02 8.2414346e-03 4.5370557e-03 3.7746594e-04]
+
+Normalized sentence prob: log(P(sentence)) / sent_length: -0.9733260146209172
+```
+TODO: Handle subwords differently
+
+**************
+File [word_categorizer.py](src/word_categorizer.py) contains the current
+attempt with Ben's approach discussed above.
+
+Some notes:
+- Start with simple English vocab (some files in [vocabularies](vocabularies))
+- Start with small number of sentences.
+- Probably should use sparse vectors and assign very low sentence probs
+ (below some threshold) as zeros: ~~TODO~~ Done, but doesn't seem to make
+ a lot of difference.
+ ~~Need to make sure that clustering can handle sparse vectors, or else~~
+ - ~~Should~~ Could implement Clark-style clustering algo.
+ - Currently, I don't think it's worth to reuse BERT evaluations for 
+ different words... I think saved processing time is small compared to
+ added algorithm complexity
+ - How to deal with sub-words? Both for probabilities and for substitution
+ 
+ **********
+ Need an evaluation measure for the word categories.
+ Following a [list of words by POS](https://www.english-grammar-revolution.com/word-lists.html),
+ I create a gold standard to evaluate the obtained categories.
+ Labeled words per category are in [POS](vocabularies/POS) directory.
+ The file [POS_unambiguous.vocab](vocabularies/POS_unambiguous.vocab)
+ contains these words, eliminating all words appearing in more than one
+ category, to avoid dealing with ambiguity for now.
+ 
+ ***********
+ Actually, ambiguity is still present in the above, as some words appearing
+ in the lists can be used as different POS, and they are clustered only
+ in a single category, i.e. `match` and `love` get normally clustered together with
+ nouns, instead of verbs.
+ We should handle ambiguity to more properly evaluate the clustering.
+ 
+ Clustering must be done carefully.
+ The standard k-means does quite a decent job for a number of clusters 
+ similar to the number of expected POS in the gold standard.
+ On the other hand, DBSCAN is very sensitive to the `eps` parameter
+ which decides the density of the clusters.
+ If `eps` changes a bit outside of the optimal value, all words get 
+ clustered in the same cluster, or not clustered at all.
+ DBSCAN doesn't seem so robust in this sense.
+ Keep in mind to implement Clark-clustering?
+ 
+ I wonder if this is also related to having "a few" features (less than 190
+ for the current experiments: 19 sentences with at most 10 masks).
+ 
+******************
+
+Using the OPTICS algorithm with default values gives a different type of
+clustering: a lot of words are left unclustered (cluster -1), but
+the formed clusters are quite good, if small.
+Example:
+```
+Cluster #-1:
+[airline, am, and, anyone, around, as, asian, at, audience, away, baby, badly, band, bed, between, brutally, building, but, by, christian, clock, country, cut, daily, did, do, drive, during, eat, entire, extremely, family, few, final, flowers, fly, french, from, go, grimly, grow, has, have, history, house, it, little, make, man, may, most, mountain, movie, music, never, none, ocean, off, of, on, or, organized, phone, play, pregnant, pretty, quite, sleep, socks, something, soon, state, stop, sunlight, swim, than, themselves, though, too, to, train, up, upstairs, urgently, very, village, walk, weekly, well, what, which, while, will, with, work, write, yesterday, yet, you, ]
+Cluster #0:
+[above, behind, below, beside, under, ]
+Cluster #1:
+[across, onto, through, ]
+Cluster #2:
+[everywhere, here, somewhere, there, ]
+Cluster #3:
+[carefully, eagerly, happily, quickly, quietly, ]
+Cluster #4:
+[australia, eyeglasses, kilimanjaro, lazily, santiago, ]
+Cluster #5:
+[banana, milk, rain, rice, snow, violin, ]
+Cluster #6:
+[bird, cat, dog, ]
+Cluster #7:
+[book, match, photograph, ]
+Cluster #8:
+[happiness, love, wealth, ]
+Cluster #9:
+[myself, yourself, yours, ]
+Cluster #10:
+[bad, clean, cold, dry, funny, good, hot, sharp, ]
+Cluster #11:
+[him, me, them, ]
+Cluster #12:
+[become, been, be, seem, ]
+Cluster #13:
+[because, if, once, until, when, where, ]
+Cluster #14:
+[whoever, whom, who, ]
+Cluster #15:
+[i, she, they, we, ]
+Cluster #16:
+[can, must, should, ]
+Cluster #17:
+[some, these, this, ]
+Cluster #18:
+[her, his, my, ]
+Cluster #19:
+[are, is, was, ]
+```
