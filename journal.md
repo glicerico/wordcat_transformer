@@ -437,3 +437,6 @@ Cluster #18:
 Cluster #19:
 [are, is, was, ]
 ```
+********
+## Feb 12, 2020
+See [mini-report](results_feb11.md) shared this day on slack.
