@@ -1,4 +1,4 @@
-# Proposal to handle sub-words in sentence probability estiamtes
+# Proposal to handle sub-words in sentence probability estimates
 
 ##Problem:
 - BERT uses sub-words in its vocabulary, while the current 
@@ -50,3 +50,4 @@ multiply each of the tokens' estimated value, as the estimated value of
 the word. 
 - For sentence probability normalization, count only words instead of 
 tokens as it's currently done.
+

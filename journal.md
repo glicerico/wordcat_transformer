@@ -440,3 +440,98 @@ Cluster #19:
 ********
 ## Feb 12, 2020
 See [mini-report](results_feb11.md) shared this day on slack.
+
+**********
+## Feb 13, 2020
+After sharing [an explanation](handle_subwords.md) of the sub-word problem
+in slack, Ben pointed out that the way I calculate sentence probability
+is flawed from a probabilistic point of view.
+I was aware of this, as it had been noted on the web 
+[here](https://github.com/google-research/bert/issues/139) and
+[here](https://github.com/google-research/bert/issues/35), but I had taken
+the approach because it was implemented similarly in 
+[here](https://github.com/xu-song/bert-as-language-model) and
+[here](https://github.com/huggingface/transformers/issues/37).
+
+My approach is clearly causing trouble with sub-words, and as Ben noted,
+also with common phrases like "quid pro quo".
+He suggests to calculate the probabilities right, which would solve the
+sub-word problem (with regards to probability estimates, I still need
+to make sure I substitute whole words and not just tokens when comparing
+sentence probabilities for different words):
+```
+P_forward(he answered quickly .) = P(he) * P(he answered | he) * P( he answered quickly | he answered) * P(he answered quickly . | he answered quickly) 
+```
+
+Since this would ignore BERT's bidirectional capabilities, Ben proposes to also
+calculate a similar probability but going backwards:
+```
+P_backwards(he answered quickly .) = P(.) * P(quickly .| .) * P(answered quickly .|quickly .) * P(he answered quickly .|answered quickly .) 
+```
+and geometric-average the two:
+```
+P(he answered quickly .) = sqrt(P_forward * P_backwards)
+```
+
+******
+## Feb 14, 2020
+
+#TODO: CHECK the following assumption!!!!!!
+Because joint probability is defined as:
+```
+P(A, B, C) = P(A) * P(B|A) * P(C|A, B)
+```
+I think a term like `P(he answered|he)` actually means
+`P(answered|he)`
+
+The question remains on how to actually interpret terms like
+`P(he answered|he)` while working with BERT.
+I interpreted it two ways:
+
+The first way is to grow the sentence gradually, and to calculate terms
+like
+```
+P(w_1=answered|w_0=he)
+```
+where the sentence fed into BERT would be:
+```
+['[CLS]', 'he', '[MASK]', '[SEP]']
+```
+and I would get the probability of `P([MASK]=answered)` from applying
+softmax to the output of the last layer in BERT.
+
+This approach, which grows the sentence gradually, was attempted in
+[a notebook](notebooks/Bert_as_LM_unidirectional-fail.ipynb), but seems
+failed to me.
+Since the sentences fed into BERT are sub-parts of the original one
+and would be quite different it, the probabilities are really off.
+
+Alternatively, I think it makes more sense with BERT to feed it a
+sentence with the right length, but masking all words that are not
+involved in the current probability estimation.
+I.e. to calculate `P(he answered|he)` in the sentence `He answered quickly.`,
+I would feed the sentence 
+```
+['[CLS]', 'he', '[MASK]', '[MASK]', '[MASK]', '[SEP]']
+```
+and again I take the probability of `P([MASK]=answered)` from applying
+softmax to the output of the last layer in BERT.
+This is the approach taken in 
+[this notebook](notebooks/Bert_as_LM_unidirectional.ipynb), which
+seems to make a lot more sense probabilistically.
+
+*******
+Also, the probability of a sentence as calculated above would grow with the 
+sentence length. 
+Hence, I decide to use some normalization.
+Previously, as in [this notebook](notebooks/Bert_as_LM.ipynb) I was actually
+calculating the logarithm of the sentence probability, divided by the length
+of the sentence, i.e. `log(P(S))/len(S)`.
+I don't have a mathematical justification for this, so I decided to try
+a geometric average of the components of the probability estimation:
+```
+P_forward(he ran .) = (P(he) * P(he ran| he) * P(he ran .|he ran)) ^ (1/3)
+```
+[This notebook](notebooks/Bert_as_LM_unidirectional.ipynb) contains calculations
+performed this way, and it make sense to me after a fist check.
+
