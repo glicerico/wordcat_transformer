@@ -527,11 +527,17 @@ Hence, I decide to use some normalization.
 Previously, as in [this notebook](notebooks/Bert_as_LM.ipynb) I was actually
 calculating the logarithm of the sentence probability, divided by the length
 of the sentence, i.e. `log(P(S))/len(S)`.
-I don't have a mathematical justification for this, so I decided to try
-a geometric average of the components of the probability estimation:
+This is equivalent to the logarithm of the geometric average of the
+probabilities of each prediction.
+Instead of representing the vectors in log space, I decided to keep
+the geometric average of the components of the probability estimation:
 ```
 P_forward(he ran .) = (P(he) * P(he ran| he) * P(he ran .|he ran)) ^ (1/3)
 ```
 [This notebook](notebooks/Bert_as_LM_unidirectional.ipynb) contains calculations
-performed this way, and it make sense to me after a fist check.
+performed this way.
+It doesn't make as much sense as the previous attempt, because sentences like
+`The steak was eaten by the man`, and `The steak ate the man` are not too dissimilar.
+However, I will try plugging it to the word category formation code, to check if the
+results make better sense than before.
 
