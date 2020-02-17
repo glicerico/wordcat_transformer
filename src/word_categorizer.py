@@ -44,9 +44,13 @@ class WordCategorizer:
     def load_matrix(self, vocab_filename, sentences_filename, pickle_filename, num_masks=1, verbose=False, sparse_thres=-8):
         """
         If pickle file is present, load data; else, calculate it.
-        This method:
-        :param sentences
-        :param pickle_file_name
+        :param vocab_filename:      File with vocabulary to categorize
+        :param sentences_filename:  File with sentence to use as features for word categorization
+        :param pickle_filename:     File to store data
+        :param num_masks:           If sentence prob is under this value, assign 0
+        :param verbose:
+        :param sparse_thres:        Cutoff to eliminate very low values and make sparse matrix
+        :return:
         """
         try:
             with open(pickle_filename, 'rb') as h:
@@ -75,11 +79,10 @@ class WordCategorizer:
     def populate_matrix(self, sents_filename, num_masks=1, sparse_thres=-4, verbose=False):
         """
         Calculates probability matrix for the sentence-word pairs
-        Currently can only handle one mask per sentence. We can repeat sentences in the sents_file as
-        a workaround to this.
         :param sents_filename:  File with input sentences
         :param num_masks:       Repetitions for each sentence, with different masks
         :param sparse_thres:    If sentence prob is under this value, assign 0
+        :param verbose:
         :return: None
         """
         print("Evaluating word-sentence probabilities")
@@ -113,7 +116,8 @@ class WordCategorizer:
         :return:
         """
         tokenized_sent[mask_pos] = word
-        curr_prob = self.Bert_Model.get_sentence_prob(tokenized_sent, verbose=verbose)
+        # curr_prob = self.Bert_Model.get_sentence_prob(tokenized_sent, verbose=verbose)
+        curr_prob = self.Bert_Model.get_sentence_prob_directional(tokenized_sent, verbose=verbose)
 
         return curr_prob
 

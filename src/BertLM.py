@@ -45,6 +45,59 @@ class BertLM:
             tokenized_input.append(EOS_TOKEN)
         return tokenized_input
 
+    def get_directional_prob(self, sm, tokenized_input, i, direction, verbose=False):
+        current_tokens = tokenized_input[:]
+        if direction == 'backwards':
+            current_tokens[1:i + 1] = [MASK_TOKEN for j in range(i)]
+        elif direction == 'forward':
+            current_tokens[i:-1] = [MASK_TOKEN for j in range(len(tokenized_input) - 1 - i)]
+        else:
+            print("Direction can only be 'forward' or 'backwards'")
+            exit()
+        if verbose:
+            print()
+            print(current_tokens)
+
+        masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokens)])
+        predictions = self.model(masked_input)
+        predictions = predictions[0]
+        probs = sm(predictions[0, i])  # Softmax to get probabilities
+        if verbose:
+            self.print_top_predictions(probs)
+
+        return probs  # Model predictions
+
+    def get_sentence_prob_directional(self, tokenized_input, verbose=False):
+        sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
+
+        # Pre-process sentence, adding special tokens
+        sent_len = len(tokenized_input)
+        ids_input = self.tokenizer.convert_tokens_to_ids(tokenized_input)
+        if verbose:
+            print(f"Processing sentence: {tokenized_input}")
+
+        sent_prob_forward = 1
+        sent_prob_backwards = 1
+        # Mask non-special tokens in forward and backwards directions; calculate their probabilities
+        for i in range(1, len(tokenized_input) - 1):  # Don't loop first and last tokens
+            probs_forward = self.get_directional_prob(sm, tokenized_input, i, 'forward', verbose=verbose)
+            probs_backwards = self.get_directional_prob(sm, tokenized_input, i, 'backwards', verbose=verbose)
+            prob_forward = probs_forward[ids_input[i]]  # Prediction for masked word
+            prob_backwards = probs_backwards[ids_input[i]]  # Prediction for masked word
+            sent_prob_forward *= np.power(prob_forward.detach().numpy(), 1 / sent_len)
+            sent_prob_backwards *= np.power(prob_backwards.detach().numpy(), 1 / sent_len)
+
+            if verbose:
+                print(f"Word: {tokenized_input[i]} \t Prob_forward: {prob_forward}; Prob_backwards: {prob_backwards}")
+
+        # Obtain geometric average of forward and backward probs
+        geom_mean_sent_prob = np.sqrt(sent_prob_forward * sent_prob_backwards)
+        if verbose:
+            print(f"Geometric-mean forward sentence probability: {sent_prob_forward}")
+            print(f"Geometric-mean backward sentence probability: {sent_prob_backwards}\n")
+            print(f"Average normalized sentence prob: {geom_mean_sent_prob}\n")
+        return geom_mean_sent_prob
+
     def get_sentence_prob(self, tokenized_input, verbose=False):
 
         """
