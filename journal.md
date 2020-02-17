@@ -476,7 +476,6 @@ P(he answered quickly .) = sqrt(P_forward * P_backwards)
 ******
 ## Feb 14, 2020
 
-#TODO: CHECK the following assumption!!!!!!
 Because joint probability is defined as:
 ```
 P(A, B, C) = P(A) * P(B|A) * P(C|A, B)
@@ -521,6 +520,7 @@ This is the approach taken in
 seems to make a lot more sense probabilistically.
 
 *******
+## Feb 15, 2020
 Also, the probability of a sentence as calculated above would grow with the 
 sentence length. 
 Hence, I decide to use some normalization.
@@ -540,4 +540,7 @@ It doesn't make as much sense as the previous attempt, because sentences like
 `The steak was eaten by the man`, and `The steak ate the man` are not too dissimilar.
 However, I will try plugging it to the word category formation code, to check if the
 results make better sense than before.
+
+*****
+## Feb 17, 2020
 

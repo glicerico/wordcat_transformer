@@ -56,23 +56,16 @@ class BertLM:
         Hence, one sentence probability requires N masked word prediction evaluations.
         :param tokenized_input: Input sentence
         :param verbose: Print information about the obtained probabilities or not.
-        :return: Sentence probability normalized by sentence length
+        :return: Log of geometric average of each prediction: sort of sentence prob. normalized by sentence length.
         """
         sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
 
         # Pre-process sentence, adding special tokens
-        # tokenized_input = self.tokenizer.tokenize(sentence)  ### Input comes pre-tokenized, bad design :(
         sent_len = len(tokenized_input)
-        # if tokenized_input[0] != BOS_TOKEN:
-        #     tokenized_input.insert(0, BOS_TOKEN)
-        # if tokenized_input[-1] != EOS_TOKEN:
-        #     tokenized_input.append(EOS_TOKEN)
         ids_input = self.tokenizer.convert_tokens_to_ids(tokenized_input)
         if verbose:
             print(f"Processing sentence: {tokenized_input}")
-            # print(f"Sentence ids: {ids_input}")
 
-        # sent_prob = 1
         sum_lp = 0
         # Mask non-special tokens and calculate their probabilities
         for i in range(1, len(tokenized_input) - 1):  # Ignore first and last tokens
@@ -83,7 +76,6 @@ class BertLM:
             current_probs = sm(predictions[0, i])  # Softmax to get probabilities
             current_prob = current_probs[ids_input[i]]  # Prediction for masked word
 
-            # sent_prob *= current_prob
             sum_lp += np.log(current_prob.detach().numpy())
 
             if verbose:
@@ -91,7 +83,6 @@ class BertLM:
                 print(f"Word: {tokenized_input[i]} \t Prob: {current_prob}")
                 self.print_top_predictions(current_probs)
 
-        # print(f"\nSentence probability: {sent_prob.item()}\n")
         if verbose:
             print(f"\nNormalized sentence prob: log(P(sentence)) / sent_length: {sum_lp / sent_len}\n")
 
