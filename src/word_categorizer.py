@@ -61,7 +61,7 @@ class WordCategorizer:
                 self.Bert_Model = _data[3]
 
                 print("MATRIX FOUND!")
-                print(self.matrix)
+                # print(self.matrix)
 
         except:
             print("MATRIX File Not Found!! \n")
@@ -90,17 +90,17 @@ class WordCategorizer:
         with open(sents_filename, 'r') as fs:
             for sent in fs:
                 tokenized_sent = self.Bert_Model.tokenize_sent(sent)
-                # word_init stores indexes where words begin (ignoring sub-words)
-                word_init = [index for index, token in enumerate(tokenized_sent) if not token.startswith("##")]
-                num_words = len(word_init)
+                # word_starts stores indexes where words begin (ignoring sub-words)
+                word_starts = [index for index, token in enumerate(tokenized_sent) if not token.startswith("##")]
+                num_words = len(word_starts)
                 # Don't mask boundary tokens, sample same sentence with various masks (less than num_words)
                 replacements_pos = rand.sample(range(1, num_words - 1), min(num_words - 2, num_repl))
                 for repl_pos in replacements_pos:
                     # Calculate sentence probability for each word in current replacement position
                     print(f"Evaluating sentence {tokenized_sent} replacing word "
-                          f"{tokenized_sent[word_init[repl_pos]:word_init[repl_pos + 1]]}")
+                          f"{tokenized_sent[word_starts[repl_pos]:word_starts[repl_pos + 1]]}")
                     sent_row = np.array(
-                        [self.process_sentence(tokenized_sent, word, repl_pos, word_init, verbose=verbose)
+                        [self.process_sentence(tokenized_sent, word, repl_pos, word_starts, verbose=verbose)
                          for word in self.vocab])
                     sent_row = sent_row * (sent_row > sparse_thres)  # Cut low probability values
                     self.matrix.append(sent_row)
