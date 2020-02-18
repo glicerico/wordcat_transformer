@@ -54,6 +54,7 @@ class BertLM:
         else:
             print("Direction can only be 'forward' or 'backwards'")
             exit()
+
         if verbose:
             print()
             print(current_tokens)
@@ -68,6 +69,21 @@ class BertLM:
         return probs  # Model predictions
 
     def get_sentence_prob_directional(self, tokenized_input, verbose=False):
+        """
+        Estimate the probability of sentence S: P(S).
+        A forward one-directional sentence probability is defined as:
+        P_f(S) = P(w_0, w_1, ..., w_N) = P(w_0) * P(w_1|w_0) * P(w_2|w_0, w_1) * ...
+        where N is the number of words in the sentence, and each P(w_i|...) is given by a transformer masked
+        word prediction with all words to its left masked.
+        To take advantage of BERT's bi-directional capabilities, we also estimate the backwards probability:
+        P_b(S) = P(w_0, w_1, ..., w_N) = P(w_N) * P(w_{N-1}|w_N) * P(w_{N-2}|w_{N-1}, w_N) * ...
+        The sentence probability is the geometric-average of the two directional ones:
+        P(S) = sqrt(P_f(S) * P_b(S))
+        Hence, one sentence probability requires 2N masked word prediction evaluations.
+        :param tokenized_input: Input sentence
+        :param verbose: Print information about the obtained probabilities or not.
+        :return: Log of geometric average of each prediction: sort of sentence prob. normalized by sentence length.
+        """
         sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
 
         # Pre-process sentence, adding special tokens
