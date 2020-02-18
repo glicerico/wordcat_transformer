@@ -68,7 +68,7 @@ class WordCategorizer:
             print("Performing matrix calculation...")
 
             self.load_vocabulary(vocab_filename)
-            self.populate_matrix(sentences_filename, num_masks=num_masks, verbose=verbose, sparse_thres=sparse_thres)
+            self.populate_matrix(sentences_filename, num_repl=num_masks, verbose=verbose, sparse_thres=sparse_thres)
 
             with open(pickle_filename, 'wb') as h:
                 _data = (self.vocab, self.gold, self.matrix, self.Bert_Model)
@@ -76,11 +76,11 @@ class WordCategorizer:
 
             print("Data stored in " + pickle_filename)
 
-    def populate_matrix(self, sents_filename, num_masks=1, sparse_thres=-4, verbose=False):
+    def populate_matrix(self, sents_filename, num_repl=1, sparse_thres=-4, verbose=False):
         """
         Calculates probability matrix for the sentence-word pairs
         :param sents_filename:  File with input sentences
-        :param num_masks:       Repetitions for each sentence, with different masks
+        :param num_repl:       Repetitions for each sentence, with different replacements
         :param sparse_thres:    If sentence prob is under this value, assign 0
         :param verbose:
         :return: None
@@ -90,15 +90,18 @@ class WordCategorizer:
         with open(sents_filename, 'r') as fs:
             for sent in fs:
                 tokenized_sent = self.Bert_Model.tokenize_sent(sent)
-                len_sent = len(tokenized_sent)
-                # Don't mask boundary tokens, sample same sentence with various masks (less than length of sent)
-                masks_pos = rand.sample(range(1, len_sent - 1), min(len_sent - 2, num_masks))
-                for mask_pos in masks_pos:
-                    # Calculate sentence probability for each word in current masked position
-                    print(f"Evaluating sentence {tokenized_sent} with mask in pos {mask_pos}")
+                # word_init stores indexes where words begin (ignoring sub-words)
+                word_init = [index for index, token in enumerate(tokenized_sent) if not token.startswith("##")]
+                num_words = len(word_init)
+                # Don't mask boundary tokens, sample same sentence with various masks (less than num_words)
+                replacements_pos = rand.sample(range(1, num_words - 1), min(num_words - 2, num_repl))
+                for repl_pos in replacements_pos:
+                    # Calculate sentence probability for each word in current replacement position
+                    print(f"Evaluating sentence {tokenized_sent} replacing word "
+                          f"{tokenized_sent[word_init[repl_pos]:word_init[repl_pos + 1]]}")
                     sent_row = np.array(
-                        [self.process_sentence(tokenized_sent[:], word, mask_pos, verbose=verbose) for word in
-                         self.vocab])
+                        [self.process_sentence(tokenized_sent, word, repl_pos, word_init, verbose=verbose)
+                         for word in self.vocab])
                     sent_row = sent_row * (sent_row > sparse_thres)  # Cut low probability values
                     self.matrix.append(sent_row)
                     num_sents += 1
@@ -106,18 +109,21 @@ class WordCategorizer:
         self.matrix = np.array(self.matrix).astype(np.float32)  # Reduce matrix precision, make rows be word-senses
         self.matrix = sparse.csr_matrix(self.matrix.T)  # Convert to sparse matrix
 
-    def process_sentence(self, tokenized_sent, word, mask_pos, verbose=False):
+    def process_sentence(self, tokenized_sent, word, repl_pos, word_init, verbose=False):
         """
-        Replaces word in mask_pos for input word, and evaluates the sentence probability
+        Replaces word in repl_pos, incl. all subwords it may contain, for input word with subwords;
+        then evaluates the sentence probability.
         :param tokenized_sent: Input sentence
         :param word: Input word
-        :param mask_pos: Position to replace input word
+        :param repl_pos: Word position to replace input word
+        :param word_init: List with initial positions of each word in tokenized_sent
         :param verbose:
-        :return:
+        :return: curr_prob: Probability of current sentence
         """
-        tokenized_sent[mask_pos] = word
-        # curr_prob = self.Bert_Model.get_sentence_prob(tokenized_sent, verbose=verbose)
-        curr_prob = self.Bert_Model.get_sentence_prob_directional(tokenized_sent, verbose=verbose)
+        # Following substitution handles removing sub-words, as well as inserting them
+        word_tokens = self.Bert_Model.tokenizer.tokenize(word)
+        replaced_sent = tokenized_sent[:word_init[repl_pos]] + word_tokens + tokenized_sent[word_init[repl_pos + 1]:]
+        curr_prob = self.Bert_Model.get_sentence_prob_directional(replaced_sent, verbose=verbose)
 
         return curr_prob
 
@@ -193,7 +199,7 @@ class WordCategorizer:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='WSD using Transformers')
     parser.add_argument('--pretrained', type=str, default='bert-base-uncased', help='Pretrained model to use')
-    parser.add_argument('--no_cuda', action='store_false', help='Use GPU?')
+    parser.add_argument('--use_cuda', action='store_true', help='Use GPU?')
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
     parser.add_argument('--vocab', type=str, required=True, help='Vocabulary Corpus')
@@ -204,14 +210,15 @@ if __name__ == '__main__':
     parser.add_argument('--end_k', type=float, default=10, help='Final value of clustering param')
     parser.add_argument('--steps_k', type=int, default=5, help='Step for clustering param exploration')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
+    parser.add_argument('--verbose', action='store_true', help='Print processing details')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file with embeddings/Save '
                                                                                'embeddings to file')
     args = parser.parse_args()
 
-    wc = WordCategorizer(args.pretrained, args.no_cuda, args.device)
+    wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
     # Heavy part of the process: calculate sentence probabilities for each vocab word
     for _ in tqdm(range(1)):  # Time the process
-        wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False,
+        wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=args.verbose,
                        sparse_thres=args.sparse_thres)
 
     print("Start clustering...")
