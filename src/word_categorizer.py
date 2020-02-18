@@ -16,7 +16,7 @@ from BertLM import BertLM
 
 
 class WordCategorizer:
-    def __init__(self, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
+    def __init__(self, pretrained_model='bert-base-uncased', use_cuda=False, device_number='cuda:2'):
 
         self.device_number = device_number
         self.use_cuda = use_cuda
@@ -191,8 +191,8 @@ class WordCategorizer:
 
 
 if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(description='WSD using BERT')
+    parser = argparse.ArgumentParser(description='WSD using Transformers')
+    parser.add_argument('--pretrained', type=str, default='bert-base-uncased', help='Pretrained model to use')
     parser.add_argument('--no_cuda', action='store_false', help='Use GPU?')
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
@@ -204,14 +204,15 @@ if __name__ == '__main__':
     parser.add_argument('--end_k', type=float, default=10, help='Final value of clustering param')
     parser.add_argument('--steps_k', type=int, default=5, help='Step for clustering param exploration')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
-    parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
-    parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
-                                                                               'Embeddings to file')
+    parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file with embeddings/Save '
+                                                                               'embeddings to file')
     args = parser.parse_args()
 
-    wc = WordCategorizer()
-    for _ in tqdm(range(1)):
-        wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False, sparse_thres=args.sparse_thres)
+    wc = WordCategorizer(args.pretrained, args.no_cuda, args.device)
+    # Heavy part of the process: calculate sentence probabilities for each vocab word
+    for _ in tqdm(range(1)):  # Time the process
+        wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=False,
+                       sparse_thres=args.sparse_thres)
 
     print("Start clustering...")
     if not os.path.exists(args.save_to):
