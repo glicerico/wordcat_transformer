@@ -541,6 +541,20 @@ It doesn't make as much sense as the previous attempt, because sentences like
 However, I will try plugging it to the word category formation code, to check if the
 results make better sense than before.
 
-*****
+***************
 ## Feb 17, 2020
+Implemented changes to make unidirectional sentence probability calculation.
+Ran OPTICS experiment; results are as good as previous runs.
+Also got distracted by meeting + debugging colleague's code 
+for networks project.
 
+***************
+## Feb 18, 2020
+
+Implemented sub-word handling while replacing words in a given sentence,
+to fill the word-sentence matrix used for word category formation.
+This is necessary, regardless of the sentence probability estimation.
+Ran experiment.
+
+Also, went back to WSD, as this is the next step to add into the pipeline.
+After reviewing code, 

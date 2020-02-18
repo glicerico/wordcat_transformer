@@ -19,13 +19,11 @@ warnings.filterwarnings('ignore')
 
 
 class BERT:
-
     def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, output_hidden_states=True):
         self.device_number = device_number
         self.use_cuda = use_cuda
 
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
-
         self.model = BertModel.from_pretrained(pretrained_model, output_hidden_states=output_hidden_states)
         with torch.no_grad():
             self.model.eval()
@@ -35,9 +33,7 @@ class BERT:
 
 
 class WordSenseModel:
-
     def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, mode='eval_only'):
-
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary that stores coordinates of every occurrence of each word
         self.embeddings = []  # Embeddings for all words in corpus
@@ -51,84 +47,60 @@ class WordSenseModel:
 
     @staticmethod
     def open_xml_file(file_name):
-
         tree = ET.parse(file_name)
         root = tree.getroot()
 
         return root, tree
 
     def semeval_sent_sense_collect(self, xml_struct):
-
         _sent = []
         _sent1 = ""
         _senses = []
-
         for idx, j in enumerate(xml_struct.iter('word')):
-
             _temp_dict = j.attrib
-
             words = _temp_dict['surface_form'].lower()
-
             if '*' not in words:
-
                 _sent1 += words + " "
-
                 _sent.extend([words])
-
                 if 'wn30_key' in _temp_dict:
-
-                    _senses.extend([_temp_dict['wn30_key']] * len([words]))
+                    _senses.extend(_temp_dict['wn30_key'].split(';')[0] * len([words]))  # keep 1st sense only
                     self.ambiguous_gold.extend([words])
-
                 else:
                     _senses.extend([0] * len([words]))
 
         return _sent, _sent1, _senses
 
     def apply_bert_tokenizer(self, word):
-
         return self.Bert_Model.tokenizer.tokenize(word)
 
     def collect_bert_tokens(self, _sent):
-
         _bert_tokens = ['[CLS]', ]
-
         for idx, j in enumerate(_sent):
             _tokens = self.apply_bert_tokenizer(_sent[idx])
-
             _bert_tokens.extend(_tokens)
-
         _bert_tokens.append('[SEP]')
 
         return _bert_tokens
 
     def get_bert_embeddings(self, tokens):
-
         _ib = self.Bert_Model.tokenizer.convert_tokens_to_ids(tokens)
         _st = [0] * len(_ib)
-
         if self.use_cuda:
-
             _t1, _t2 = torch.tensor([_ib]).to(self.device_number), torch.tensor([_st]).to(self.device_number)
-
         else:
             _t1, _t2 = torch.tensor([_ib]), torch.tensor([_st])
 
         with torch.no_grad():
-
             _, _, _encoded_layers = self.Bert_Model.model(_t1, token_type_ids=_t2)
-
             # Average last 4 hidden layers (second best result from Devlin et al. 2019)
             _e1 = _encoded_layers[-4:]
             _e2 = torch.cat((_e1[0], _e1[1], _e1[2], _e1[3]), 0)
             _e3 = torch.mean(_e2, dim=0)
-
             if self.use_cuda:
                 _final_layer = _e3.cpu().numpy()
-
             else:
                 _final_layer = _e3.numpy()
-                _final_layer = np.around(_final_layer, decimals=5)  # LOWER PRECISION, process faster. CHECK if good!!
+                _final_layer = np.around(_final_layer, decimals=5)  # LOWER PRECISION, process faster. TODO: Check!
 
         return _final_layer
 
@@ -157,7 +129,6 @@ class WordSenseModel:
             print("Performing first pass...")
 
             self.calculate_embeddings(corpus_file=corpus_file)
-
             with open(pickle_file_name, 'wb') as h:
                 _data = (self.sentences, self.vocab_map, self.embeddings, self.ambiguous_gold)
                 pickle.dump(_data, h)
@@ -167,35 +138,28 @@ class WordSenseModel:
     def calculate_embeddings(self, corpus_file):
         """
         Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
-        :param corpus_file:     file to obtain vocabulary from
+        :param corpus_file:     file to get vocabulary
         """
-
         _test_root, _test_tree = self.open_xml_file(corpus_file)
-
         embeddings_count = 0
-
         fk = open(corpus_file[:-3] + 'key', 'w')  # Key to GOLD word senses
         inst_counter = 0  # Useless instance counter needed for evaluator
 
         # Process each sentence in corpus
         for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
             sent_embeddings = []  # Store one sentence's word embeddings as elements
-
             sent, sent1, senses = self.semeval_sent_sense_collect(i)
             self.sentences.append(sent1)
-
             bert_tokens = self.collect_bert_tokens(sent)
-
             final_layer = self.get_bert_embeddings(bert_tokens)
 
             token_count = 1
-
             # Process all words in sentence
             for word_pos, j in enumerate(zip(sent, senses)):
                 gold_instance = 0  # Bool indicating if a word is disambiguated in reference corpus
                 word = j[0]
+                word_len = len(self.apply_bert_tokenizer(word))  # Handle subwords
                 sense = j[1]
-
                 # Save GOLD sense
                 if sense != 0:
                     fk.write(f"{word} {inst_counter} {sense}\n")
@@ -207,10 +171,9 @@ class WordSenseModel:
                     self.vocab_map[word] = []
                 self.vocab_map[word].append((sent_nbr, word_pos, gold_instance))
 
-                embedding = np.mean(final_layer[token_count:token_count + len(self.apply_bert_tokenizer(word))], 0)
+                embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
                 sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
-                token_count += len(self.apply_bert_tokenizer(word))
-
+                token_count += word_len
                 embeddings_count += 1
 
             # Store this sentence embeddings in the general list
@@ -382,11 +345,9 @@ if __name__ == '__main__':
         print("Processing all words below threshold")
 
     print("Loading WSD Model!")
-
     WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.no_cuda, mode=args.mode)
 
-    print("Loaded WSD Model!")
-
+    print("Obtaining word embeddings...")
     WSD.load_embeddings(args.pickle_file, args.corpus)
 
     print("Start disambiguation...")
