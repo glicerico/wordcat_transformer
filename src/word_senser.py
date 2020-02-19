@@ -63,7 +63,7 @@ class WordSenseModel:
                 _sent1 += words + " "
                 _sent.extend([words])
                 if 'wn30_key' in _temp_dict:
-                    _senses.extend(_temp_dict['wn30_key'].split(';')[0] * len([words]))  # keep 1st sense only
+                    _senses.extend([_temp_dict['wn30_key'].split(';')[0]] * len([words]))  # Keep 1st sense only
                     self.ambiguous_gold.extend([words])
                 else:
                     _senses.extend([0] * len([words]))
@@ -219,7 +219,7 @@ class WordSenseModel:
             fk_dbscan = []
             save_dbscan = []
             for eps_val in eps_dbscan:
-                this_save = save_to + f"/DBSCAN_eps{eps_val:02}"  # FIX: Format doesn't work
+                this_save = save_to + f"/DBSCAN_eps{eps_val:02}"  # TODO: FIX: Format doesn't work
                 if not os.path.exists(this_save):
                     os.makedirs(this_save)
                 save_dbscan.append(this_save)
@@ -232,18 +232,18 @@ class WordSenseModel:
                     print(f"Ignoring word \"{word}\", as it is not ambiguous in reference corpus")
                     continue
 
-                if len(instances) < freq_threshold:  # Don't disambiguate if word is uncommon
-                    print(f"Word \"{word}\" frequency out of threshold")
-                    continue
-                else:
-                    print(f'Disambiguating word \"{word}\"...')
-
                 # Build embeddings list for this word
                 curr_embeddings = []
                 for instance in instances:
                     x, y, ambiguous = instance  # Get current word instance coordinates
                     if not(self.mode == 'eval_only' and ambiguous == 0):
                         curr_embeddings.append(self.embeddings[x][y])
+
+                if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
+                    print(f"Word \"{word}\" frequency out of threshold")
+                    continue
+
+                print(f'Disambiguating word \"{word}\"...')
 
                 estimator.fit(curr_embeddings)  # Disambiguate with OPTICS
                 self.write_clusters(fl, save_to, word, estimator.labels_)
@@ -310,7 +310,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='WSD using BERT')
 
-    parser.add_argument('--no_cuda', action='store_false', help='Use GPU?')
+    parser.add_argument('--use_cuda', action='store_true', help='Use GPU?')
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--corpus', type=str, required=True, help='Training Corpus')
     parser.add_argument('--threshold', type=int, default=1, help='Min freq of word to be disambiguated')
@@ -328,7 +328,7 @@ if __name__ == '__main__':
 
     print("Corpus is: " + args.corpus)
 
-    if args.no_cuda:
+    if args.use_cuda:
         print("Processing with CUDA!")
 
     else:
@@ -346,7 +346,7 @@ if __name__ == '__main__':
         print("Processing all words below threshold")
 
     print("Loading WSD Model!")
-    WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.no_cuda, mode=args.mode)
+    WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.use_cuda, mode=args.mode)
 
     print("Obtaining word embeddings...")
     WSD.load_embeddings(args.pickle_file, args.corpus)
@@ -354,3 +354,7 @@ if __name__ == '__main__':
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
         WSD.disambiguate(args.save_to, freq_threshold=args.threshold)
+
+    print("\n\n*******************************************************")
+    print(f"WSD finished. Output files written in {args.save_to}")
+
