@@ -241,8 +241,9 @@ class WordSenseModel:
                 # Build embeddings list for this word
                 curr_embeddings = []
                 for instance in instances:
-                    x, y, _ = instance  # Get current word instance coordinates
-                    curr_embeddings.append(self.embeddings[x][y])
+                    x, y, ambiguous = instance  # Get current word instance coordinates
+                    if not(self.mode == 'eval_only' and ambiguous == 0):
+                        curr_embeddings.append(self.embeddings[x][y])
 
                 estimator.fit(curr_embeddings)  # Disambiguate with OPTICS
                 self.write_clusters(fl, save_to, word, estimator.labels_)

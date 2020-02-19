@@ -58,6 +58,7 @@ def compute_metrics(answers, predictions):
     fscores = []
     weights = []
     for k in answers.keys():
+        print(f"Evaluating word {k}")
         idx = np.argsort(np.array(answers[k][0]))
         true = np.array(answers[k][1])[idx]
         pred = np.array(predictions[k][1])
@@ -84,6 +85,10 @@ if __name__ == '__main__':
     GS_file = sys.argv[1]
     pred_file = sys.argv[2]
 
+    print("Loading gold standard...")
     true_answers = read_answers(GS_file)
+    print("Loading prediction...")
     predictions = read_answers(pred_file)
+
+    print("Evaluating...")
     compute_metrics(true_answers, predictions)
