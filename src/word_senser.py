@@ -33,15 +33,13 @@ class BERT:
 
 
 class WordSenseModel:
-    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, mode='eval_only'):
+    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary that stores coordinates of every occurrence of each word
         self.embeddings = []  # Embeddings for all words in corpus
-        self.ambiguous_gold = []  # Words that are ambiguous in GOLD standard
 
         self.device_number = device_number
         self.use_cuda = use_cuda
-        self.mode = mode
 
         self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
 
@@ -52,7 +50,8 @@ class WordSenseModel:
 
         return root, tree
 
-    def semeval_sent_sense_collect(self, xml_struct):
+    @staticmethod
+    def semeval_sent_sense_collect(xml_struct):
         _sent = []
         _sent1 = ""
         _senses = []
@@ -64,7 +63,6 @@ class WordSenseModel:
                 _sent.extend([words])
                 if 'wn30_key' in _temp_dict:
                     _senses.extend([_temp_dict['wn30_key'].split(';')[0]] * len([words]))  # Keep 1st sense only
-                    self.ambiguous_gold.extend([words])
                 else:
                     _senses.extend([0] * len([words]))
 
@@ -104,7 +102,7 @@ class WordSenseModel:
 
         return _final_layer
 
-    def load_embeddings(self, pickle_file_name, corpus_file):
+    def load_embeddings(self, pickle_file_name, corpus_file, mode):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
@@ -113,6 +111,7 @@ class WordSenseModel:
           c) Calculates embeddings for each vocabulary word.
         :param pickle_file_name
         :param corpus_file
+        :param mode:            Determine if only gold-ambiguous words are stored
         """
         try:
             with open(pickle_file_name, 'rb') as h:
@@ -120,7 +119,6 @@ class WordSenseModel:
                 self.sentences = _data[0]
                 self.vocab_map = _data[1]
                 self.embeddings = _data[2]
-                self.ambiguous_gold = _data[3]
 
                 print("EMBEDDINGS FOUND!")
 
@@ -128,20 +126,21 @@ class WordSenseModel:
             print("Embedding File Not Found!! \n")
             print("Performing first pass...")
 
-            self.calculate_embeddings(corpus_file=corpus_file)
+            self.calculate_embeddings(corpus_file, mode)
             with open(pickle_file_name, 'wb') as h:
-                _data = (self.sentences, self.vocab_map, self.embeddings, self.ambiguous_gold)
+                _data = (self.sentences, self.vocab_map, self.embeddings)
                 pickle.dump(_data, h)
 
             print("Data stored in " + pickle_file_name)
 
-    def calculate_embeddings(self, corpus_file):
+    def calculate_embeddings(self, corpus_file, mode):
         """
         Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
         :param corpus_file:     file to get vocabulary
+        :param mode:            Determine if only gold-ambiguous words are stored
         """
         _test_root, _test_tree = self.open_xml_file(corpus_file)
-        embeddings_count = 0
+        stored_embeddings = 0
         fk = open(corpus_file[:-3] + 'key', 'w')  # Key to GOLD word senses
         inst_counter = 0  # Useless instance counter needed for evaluator
 
@@ -156,31 +155,33 @@ class WordSenseModel:
             token_count = 1
             # Process all words in sentence
             for word_pos, j in enumerate(zip(sent, senses)):
-                gold_instance = 0  # Bool indicating if a word is disambiguated in reference corpus
                 word = j[0]
-                word_len = len(self.apply_bert_tokenizer(word))  # Handle subwords
                 sense = j[1]
-                # Save GOLD sense
-                if sense != 0:
+                word_len = len(self.apply_bert_tokenizer(word))  # Handle subwords
+
+                if mode == 'eval_only' and sense == 0:  # Don't store embedding if it's not gold-ambiguous
+                    sent_embeddings.append(0)
+                else:
+                    # Save sense in key file
                     fk.write(f"{word} {inst_counter} {sense}\n")
                     inst_counter += 1
-                    gold_instance = 1
 
-                # Register word location in vocabulary dictionary
-                if word not in self.vocab_map.keys():
-                    self.vocab_map[word] = []
-                self.vocab_map[word].append((sent_nbr, word_pos, gold_instance))
+                    embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
+                    sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
+                    stored_embeddings += 1
 
-                embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
-                sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
+                    # Register word location in vocabulary dictionary
+                    if word not in self.vocab_map.keys():
+                        self.vocab_map[word] = []
+                    self.vocab_map[word].append((sent_nbr, word_pos))
+
                 token_count += word_len
-                embeddings_count += 1
 
             # Store this sentence embeddings in the general list
             self.embeddings.append(sent_embeddings)
 
         fk.close()
-        print(f"{embeddings_count} EMBEDDINGS GENERATED")
+        print(f"{stored_embeddings} EMBEDDINGS STORED")
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, **kwargs):
         """
@@ -228,16 +229,11 @@ class WordSenseModel:
 
             # Loop for each word in vocabulary
             for word, instances in self.vocab_map.items():
-                if self.mode == 'eval_only' and word not in self.ambiguous_gold:
-                    print(f"Ignoring word \"{word}\", as it is not ambiguous in reference corpus")
-                    continue
-
                 # Build embeddings list for this word
                 curr_embeddings = []
                 for instance in instances:
-                    x, y, ambiguous = instance  # Get current word instance coordinates
-                    if not(self.mode == 'eval_only' and ambiguous == 0):
-                        curr_embeddings.append(self.embeddings[x][y])
+                    x, y = instance  # Get current word instance coordinates
+                    curr_embeddings.append(self.embeddings[x][y])
 
                 if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
                     print(f"Word \"{word}\" frequency out of threshold")
@@ -268,9 +264,8 @@ class WordSenseModel:
 
     @staticmethod
     def write_predictions(fk, word, labels, instances):
-            for count, label in enumerate(labels):
-                if instances[count][2]:  # Only save if it's ambiguous in gold standard
-                    fk.write(f"{word} {count} {label}\n")
+        for count, label in enumerate(labels):
+            fk.write(f"{word} {count} {label}\n")
 
     def write_clusters(self, fl, save_dir, word, labels):
         """
@@ -292,13 +287,13 @@ class WordSenseModel:
                 fo.write(f"Cluster #{i}")
                 if len(sense_members) > 0:  # Handle empty clusters
                     fo.write(": \n[")
-                    np.savetxt(fo, sense_members, fmt="(%s, %s, %s)", newline=", ")
+                    np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
                     fo.write(']\n')
                     # Write at most 3 sentence examples for the word sense
                     sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
                     fo.write('Samples:\n')
                     # Write sample sentences to file, with focus word in CAPS for easier reading
-                    for sample, focus_word, _ in sent_samples:
+                    for sample, focus_word in sent_samples:
                         bold_sent = self.sentences[sample].split()
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
@@ -346,10 +341,10 @@ if __name__ == '__main__':
         print("Processing all words below threshold")
 
     print("Loading WSD Model!")
-    WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.use_cuda, mode=args.mode)
+    WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_embeddings(args.pickle_file, args.corpus)
+    WSD.load_embeddings(args.pickle_file, args.corpus, args.mode)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
