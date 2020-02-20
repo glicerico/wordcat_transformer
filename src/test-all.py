@@ -66,12 +66,13 @@ def compute_metrics(answers, predictions):
     vscores = []
     fscores = []
     weights = []
-    for k in answers.keys():
+    for k, v in answers.items():
+        if len(v[0]) == 1:
+            print(f"Skipping one-instance word {k}")
+            continue
         print(f"Evaluating word {k}")
-        if k == 'drawing':
-            print("Stop")
-        idx = np.argsort(np.array(answers[k][0]))
-        true = np.array(answers[k][1])[idx]
+        idx = np.argsort(np.array(v[0]))
+        true = np.array(v[1])[idx]
         pred = np.array(predictions[k][1])
         weights.append(pred.shape[0])
         if len(np.unique(true)) > 1:
