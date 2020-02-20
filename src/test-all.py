@@ -46,7 +46,6 @@ def read_answers(filename, all_in_one=False):
         for line in f.readlines():
             key, instance, sense = line.strip().split(' ')
             if all_in_one:  # Baseline where all words have same sense
-                print("entered")
                 sense = 0
             num = int(instance.split('.')[-1])
             keys.append(key)
@@ -99,7 +98,9 @@ def compute_metrics(answers, predictions):
 if __name__ == '__main__':
     GS_file = sys.argv[1]
     pred_file = sys.argv[2]
-    baseline = sys.argv[3]
+    baseline = ''
+    if len(sys.argv) == 4:
+        baseline = sys.argv[3]
 
     print("Loading gold standard...")
     true_answers = read_answers(GS_file)
