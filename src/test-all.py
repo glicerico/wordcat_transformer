@@ -36,7 +36,7 @@ def compute_fscore(true, pred):
         return 2 * p * r / float(p + r)  # Added epsilon to avoid division by 0
 
 
-def read_answers(filename):
+def read_answers(filename, all_in_one=False):
     with open(filename, 'r') as f:
         keys = []
         instances = []
@@ -45,6 +45,9 @@ def read_answers(filename):
         sense_count = 0
         for line in f.readlines():
             key, instance, sense = line.strip().split(' ')
+            if all_in_one:  # Baseline where all words have same sense
+                print("entered")
+                sense = 0
             num = int(instance.split('.')[-1])
             keys.append(key)
             instances.append(num)
@@ -96,11 +99,16 @@ def compute_metrics(answers, predictions):
 if __name__ == '__main__':
     GS_file = sys.argv[1]
     pred_file = sys.argv[2]
+    baseline = sys.argv[3]
 
     print("Loading gold standard...")
     true_answers = read_answers(GS_file)
     print("Loading prediction...")
-    predictions = read_answers(pred_file)
+    if baseline == 'all_in_one':
+        print("entered")
+        predictions = read_answers(pred_file, all_in_one=True)
+    else:
+        predictions = read_answers(pred_file)
 
     print("Evaluating...")
     compute_metrics(true_answers, predictions)
