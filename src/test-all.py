@@ -22,9 +22,18 @@ def compute_fscore(true, pred):
     true_pairs = get_pairs(true)
     pred_pairs = get_pairs(pred)
     int_size = len(set(true_pairs).intersection(pred_pairs))
-    p = int_size / float(len(pred_pairs))
-    r = int_size / float(len(true_pairs))
-    return 2 * p * r / float(p + r)
+    # Handle special cases
+    eps = 0.00001
+    len_true = len(true_pairs) + eps  # Add epsilon to avoid division by 0
+    len_pred = len(pred_pairs) + eps
+    if len_true + len_pred == 0:  # Neither true nor pred have any pairs
+        return 1
+    elif int_size == 0:  # No match between pairs
+        return 0
+    else:
+        p = int_size / float(len(pred_pairs))
+        r = int_size / float(len(true_pairs))
+        return 2 * p * r / float(p + r)  # Added epsilon to avoid division by 0
 
 
 def read_answers(filename):
@@ -59,6 +68,8 @@ def compute_metrics(answers, predictions):
     weights = []
     for k in answers.keys():
         print(f"Evaluating word {k}")
+        if k == 'drawing':
+            print("Stop")
         idx = np.argsort(np.array(answers[k][0]))
         true = np.array(answers[k][1])[idx]
         pred = np.array(predictions[k][1])
