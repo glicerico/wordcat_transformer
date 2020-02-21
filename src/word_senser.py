@@ -195,72 +195,53 @@ class WordSenseModel:
         :param kwargs:          Clustering parameters
         """
 
-        # k = kwargs.get('k', 10)  # 10 is default value, if no kwargs were passed
-        # freq_threshold = max(freq_threshold, k)
-        # estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
-        # estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=0.3)
-
         # Use OPTICS estimator also to get DBSCAN clusters
         if clust_method == 'OPTICS':
-            min_samples = kwargs.get('min_samples', 0.1)  # at least 10% of instances in a sense
-            max_eps = kwargs.get('max_eps', 0.4)  # max distance to be neighbors
-
+            min_samples = kwargs.get('min_samples', 1)
             # Init clustering object
-            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4, max_eps=max_eps)
-            save_to = save_dir + "_OPTICS_minsamp" + str(min_samples) + "_maxeps" + str(max_eps)
-            if not os.path.exists(save_to):
-                os.makedirs(save_to)
-            fl = open(save_to + "/clustering.log", 'w')  # Logging file
-            fl.write(f"# WORD\t\tCLUSTERS\n")
-            fk = open(save_to + "/disamb.pred", 'w')  # Predictions for evaluation against GOLD
+            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4, max_eps=0.4)
+            save_to = save_dir + "_OPTICS_minsamp" + str(min_samples)
+        elif clust_method == 'KMeans':
+            k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
+            freq_threshold = max(freq_threshold, k)
+            estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
+            save_to = save_dir + "_KMeans_k" + str(k)
+        elif clust_method == 'DBSCAN':
+            min_samples = kwargs.get('min_samples', 2)
+            eps = kwargs.get('eps', 0.3)
+            estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=eps)
+            save_to = save_dir + "_DBSCAN_minsamp" + str(min_samples) + '_eps' + str(eps)
 
-            # directory and files setup for repeated dbscan clustering
-            eps_dbscan = np.linspace(0.1, max_eps, round(max_eps / 0.1))  # eps intervals to use in dbscan
-            fl_dbscan = []
-            fk_dbscan = []
-            save_dbscan = []
-            for eps_val in eps_dbscan:
-                this_save = save_to + f"/DBSCAN_eps{eps_val:02}"  # TODO: FIX: Format doesn't work
-                if not os.path.exists(this_save):
-                    os.makedirs(this_save)
-                save_dbscan.append(this_save)
-                fl_dbscan.append(open(this_save + "/clustering.log", 'w'))
-                fk_dbscan.append(open(this_save + "/disamb.pred", 'w'))
+        if not os.path.exists(save_to):
+            os.makedirs(save_to)
+        fl = open(save_to + "/clustering.log", 'w')  # Logging file
+        fl.write(f"# WORD\t\tCLUSTERS\n")
+        fk = open(save_to + "/disamb.pred", 'w')  # Predictions for evaluation against GOLD
 
-            # Loop for each word in vocabulary
-            for word, instances in self.vocab_map.items():
-                # Build embeddings list for this word
-                curr_embeddings = []
-                for instance in instances:
-                    x, y = instance  # Get current word instance coordinates
-                    curr_embeddings.append(self.embeddings[x][y])
+        # Loop for each word in vocabulary
+        for word, instances in self.vocab_map.items():
+            # Build embeddings list for this word
+            curr_embeddings = []
+            for instance in instances:
+                x, y = instance  # Get current word instance coordinates
+                curr_embeddings.append(self.embeddings[x][y])
 
-                if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
-                    print(f"Word \"{word}\" frequency out of threshold")
-                    continue
+            if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
+                print(f"Word \"{word}\" frequency out of threshold")
+                continue
 
-                print(f'Disambiguating word \"{word}\"...')
+            print(f'Disambiguating word \"{word}\"...')
+            if word == 'study':
+                print("STOP")
+            estimator.fit(curr_embeddings)  # Disambiguate
+            self.write_clusters(fl, save_to, word, estimator.labels_)
+            self.write_predictions(fk, word, estimator.labels_, instances)
 
-                estimator.fit(curr_embeddings)  # Disambiguate with OPTICS
-                self.write_clusters(fl, save_to, word, estimator.labels_)
-                self.write_predictions(fk, word, estimator.labels_, instances)
 
-                # Use OPTICS estimator to do DBSCAN in range of eps values
-                for eps_val, this_fl, this_fk, this_save in zip(eps_dbscan, fl_dbscan, fk_dbscan, save_dbscan):
-                    this_labels = cluster_optics_dbscan(reachability=estimator.reachability_,
-                                                        core_distances=estimator.core_distances_,
-                                                        ordering=estimator.ordering_, eps=eps_val)
-                    self.write_clusters(this_fl, this_save, word, this_labels)
-                    self.write_predictions(this_fk, word, this_labels, instances)
 
-            for this_fl, this_fk in zip(fl_dbscan, fk_dbscan):
-                this_fl.write("\n")
-                this_fl.close()
-                this_fk.close()
-
-            fl.write("\n")
-            fl.close()
-            fk.close()
+        fl.write("\n")
+        fl.close()
+        fk.close()
 
     @staticmethod
     def write_predictions(fk, word, labels, instances):
@@ -308,14 +289,14 @@ if __name__ == '__main__':
     parser.add_argument('--use_cuda', action='store_true', help='Use GPU?')
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--corpus', type=str, required=True, help='Training Corpus')
-    parser.add_argument('--threshold', type=int, default=1, help='Min freq of word to be disambiguated')
+    parser.add_argument('--threshold', type=int, default=2, help='Min freq of word to be disambiguated')
     parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use in KMeans')
     parser.add_argument('--end_k', type=int, default=10, help='Final number of clusters to use in KMeans')
-    parser.add_argument('--step_k', type=int, default=5, help='Increase in number of clusters to use')
+    parser.add_argument('--step_k', type=int, default=1, help='Increase in number of clusters to use')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
-    parser.add_argument('--use_euclidean', type=int, default=0, help='Use Euclidean Distance to Find NNs?')
     parser.add_argument('--mode', type=str, default='eval_only', help='Determines if all words need to be clustered')
+    parser.add_argument('--clustering', type=str, default='OPTICS', help='Clustering method to use')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
                                                                                'Embeddings to file')
 
@@ -328,12 +309,6 @@ if __name__ == '__main__':
 
     else:
         print("Processing without CUDA!")
-
-    if args.use_euclidean:
-        print("Using Euclidean Distance!")
-
-    else:
-        print("Using Cosine Similarity!")
 
     if args.mode == "eval_only":
         print("Processing only ambiguous words in training corpus...")
@@ -348,7 +323,7 @@ if __name__ == '__main__':
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(args.save_to, freq_threshold=args.threshold)
+        WSD.disambiguate(args.save_to, clust_method=args.clustering, freq_threshold=args.threshold, k=nn)
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")
