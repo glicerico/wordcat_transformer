@@ -56,7 +56,7 @@ class WordSenseModel:
 
         return _final_layer
 
-    def load_embeddings(self, pickle_file_name, corpus_file, mode):
+    def load_embeddings(self, pickle_file_name, corpus_file):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
@@ -65,7 +65,6 @@ class WordSenseModel:
           c) Calculates embeddings for each vocabulary word.
         :param pickle_file_name
         :param corpus_file
-        :param mode:            Determine if only gold-ambiguous words are stored
         """
         try:
             with open(pickle_file_name, 'rb') as h:
@@ -80,7 +79,7 @@ class WordSenseModel:
             print("Embedding File Not Found!! \n")
             print("Performing first pass...")
 
-            self.calculate_embeddings(corpus_file, mode)
+            self.calculate_embeddings(corpus_file)
             with open(pickle_file_name, 'wb') as h:
                 _data = (self.sentences, self.vocab_map, self.embeddings)
                 pickle.dump(_data, h)
@@ -96,11 +95,10 @@ class WordSenseModel:
         sentence = self.Bert_Model.tokenizer.convert_tokens_to_string(tokenized_sent)
         return sentence.split()
 
-    def calculate_embeddings(self, corpus_file, mode):
+    def calculate_embeddings(self, corpus_file):
         """
         Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
         :param corpus_file:     file to get vocabulary
-        :param mode:            Determine if only gold-ambiguous words are stored
         """
         fi = open(corpus_file, 'r')
         stored_embeddings = 0
@@ -255,7 +253,6 @@ if __name__ == '__main__':
     parser.add_argument('--step_k', type=int, default=1, help='Increase in number of clusters to use')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
-    parser.add_argument('--mode', type=str, default='eval_only', help='Determines if all words need to be clustered')
     parser.add_argument('--clustering', type=str, default='OPTICS', help='Clustering method to use')
     parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
                                                                                'Embeddings to file')
@@ -270,16 +267,11 @@ if __name__ == '__main__':
     else:
         print("Processing without CUDA!")
 
-    if args.mode == "eval_only":
-        print("Processing only ambiguous words in training corpus...")
-    else:
-        print("Processing all words below threshold")
-
     print("Loading WSD Model!")
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_embeddings(args.pickle_file, args.corpus, args.mode)
+    WSD.load_embeddings(args.pickle_file, args.corpus)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
