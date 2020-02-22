@@ -12,7 +12,7 @@ from scipy import sparse
 
 # My modules
 sys.path.insert(0, os.path.abspath('../src'))
-from BertLM import BertLM
+from BertModel import BertLM
 
 
 class WordCategorizer:
