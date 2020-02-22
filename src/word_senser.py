@@ -36,6 +36,7 @@ class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary that stores coordinates of every occurrence of each word
+        self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
         self.embeddings = []  # Embeddings for all words in corpus
 
         self.device_number = device_number
@@ -194,7 +195,6 @@ class WordSenseModel:
         :param freq_threshold:  Frequency threshold for a word to be disambiguated
         :param kwargs:          Clustering parameters
         """
-
         # Use OPTICS estimator also to get DBSCAN clusters
         if clust_method == 'OPTICS':
             min_samples = kwargs.get('min_samples', 1)
@@ -211,6 +211,9 @@ class WordSenseModel:
             eps = kwargs.get('eps', 0.3)
             estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=eps)
             save_to = save_dir + "_DBSCAN_minsamp" + str(min_samples) + '_eps' + str(eps)
+        else:
+            print("Clustering methods implemented are: OPTICS, DBSCAN, KMeans")
+            exit(1)
 
         if not os.path.exists(save_to):
             os.makedirs(save_to)
@@ -231,13 +234,9 @@ class WordSenseModel:
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
-            if word == 'study':
-                print("STOP")
             estimator.fit(curr_embeddings)  # Disambiguate
-            self.write_clusters(fl, save_to, word, estimator.labels_)
+            self.cluster_centroids[word] = self.export_clusters(fl, save_to, word, estimator.labels_)
             self.write_predictions(fk, word, estimator.labels_, instances)
-
-
 
         fl.write("\n")
         fl.close()
@@ -248,7 +247,7 @@ class WordSenseModel:
         for count, label in enumerate(labels):
             fk.write(f"{word} {count} {label}\n")
 
-    def write_clusters(self, fl, save_dir, word, labels):
+    def export_clusters(self, fl, save_dir, word, labels):
         """
         Write clustering results to file
         :param fl:              handle for logging file
@@ -256,7 +255,7 @@ class WordSenseModel:
         :param word:            Current word to disambiguate
         :param labels:          Cluster labels for each word instance
         """
-
+        sense_centroids = []  # List with word sense centroids
         num_clusters = max(labels) + 1
         print(f"Num clusters: {num_clusters}")
         fl.write(f"{word}\t\t{num_clusters}\n")
@@ -278,8 +277,14 @@ class WordSenseModel:
                         bold_sent = self.sentences[sample].split()
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
+
+                    # Calculate cluster centroid and save
+                    sense_embeddings = [self.embeddings[x][y] for x, y in sense_members]
+                    sense_centroids.append(np.mean(sense_embeddings, 0))
                 else:
                     fo.write(" is empty\n\n")
+
+        return sense_centroids
 
 
 if __name__ == '__main__':
