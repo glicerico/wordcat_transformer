@@ -31,42 +31,8 @@ class WordSenseModel:
 
         self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
 
-    @staticmethod
-    def open_xml_file(file_name):
-        tree = ET.parse(file_name)
-        root = tree.getroot()
-
-        return root, tree
-
-    @staticmethod
-    def semeval_sent_sense_collect(xml_struct):
-        _sent = []
-        _sent1 = ""
-        _senses = []
-        for idx, j in enumerate(xml_struct.iter('word')):
-            _temp_dict = j.attrib
-            words = _temp_dict['surface_form'].lower()
-            if '*' not in words:
-                _sent1 += words + " "
-                _sent.extend([words])
-                if 'wn30_key' in _temp_dict:
-                    _senses.extend([_temp_dict['wn30_key'].split(';')[0]] * len([words]))  # Keep 1st sense only
-                else:
-                    _senses.extend([0] * len([words]))
-
-        return _sent, _sent1, _senses
-
     def apply_bert_tokenizer(self, word):
         return self.Bert_Model.tokenizer.tokenize(word)
-
-    def collect_bert_tokens(self, _sent):
-        _bert_tokens = ['[CLS]', ]
-        for idx, j in enumerate(_sent):
-            _tokens = self.apply_bert_tokenizer(_sent[idx])
-            _bert_tokens.extend(_tokens)
-        _bert_tokens.append('[SEP]')
-
-        return _bert_tokens
 
     def get_bert_embeddings(self, tokens):
         _ib = self.Bert_Model.tokenizer.convert_tokens_to_ids(tokens)
@@ -121,39 +87,40 @@ class WordSenseModel:
 
             print("Data stored in " + pickle_file_name)
 
+    def get_words(self, tokenized_sent):
+        """
+        Returns the complete words in a BERT-tokenized sentence (merges sub-words)
+        :param tokenized_sent:
+        :return:
+        """
+        sentence = self.Bert_Model.tokenizer.convert_tokens_to_string(tokenized_sent)
+        return sentence.split()
+
     def calculate_embeddings(self, corpus_file, mode):
         """
         Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
         :param corpus_file:     file to get vocabulary
         :param mode:            Determine if only gold-ambiguous words are stored
         """
-        _test_root, _test_tree = self.open_xml_file(corpus_file)
+        fi = open(corpus_file, 'r')
         stored_embeddings = 0
-        fk = open(corpus_file[:-3] + 'key', 'w')  # Key to GOLD word senses
-        inst_counter = 0  # Useless instance counter needed for evaluator
 
         # Process each sentence in corpus
-        for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
+        for sent_nbr, sent in tqdm(enumerate(fi)):
             sent_embeddings = []  # Store one sentence's word embeddings as elements
-            sent, sent1, senses = self.semeval_sent_sense_collect(i)
-            self.sentences.append(sent1)
-            bert_tokens = self.collect_bert_tokens(sent)
+            self.sentences.append(sent)
+            bert_tokens = self.Bert_Model.tokenize_sent(sent)
+            words = self.get_words(bert_tokens)
             final_layer = self.get_bert_embeddings(bert_tokens)
 
             token_count = 1
             # Process all words in sentence
-            for word_pos, j in enumerate(zip(sent, senses)):
-                word = j[0]
-                sense = j[1]
+            for word_pos, word in enumerate(words):
                 word_len = len(self.apply_bert_tokenizer(word))  # Handle subwords
 
-                if mode == 'eval_only' and sense == 0:  # Don't store embedding if it's not gold-ambiguous
+                if False:  # Don't store embedding if it's too frequent (function word)
                     sent_embeddings.append(0)
                 else:
-                    # Save sense in key file
-                    fk.write(f"{word} {inst_counter} {sense}\n")
-                    inst_counter += 1
-
                     embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
                     sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
                     stored_embeddings += 1
@@ -168,6 +135,7 @@ class WordSenseModel:
             # Store this sentence embeddings in the general list
             self.embeddings.append(sent_embeddings)
 
+        fi.close()
         fk.close()
         print(f"{stored_embeddings} EMBEDDINGS STORED")
 
