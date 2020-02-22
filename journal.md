@@ -557,4 +557,21 @@ This is necessary, regardless of the sentence probability estimation.
 Ran experiment.
 
 Also, went back to WSD, as this is the next step to add into the pipeline.
-After reviewing code, 
+
+********
+## Feb 21, 2020
+In the past days, I reviewed the code and checked performance of WSD, which
+is the stage I had stopped at last time I worked on it.
+Performance is evaluated against the gold standards in the senseval/semeval
+files. The problem with those is that:
+1) They are quite granular in the senses they provide.
+2) There are too few examples to work with
+
+Hence, sklearn clustering algorithms DBSCAN and OPTICS are struggling to 
+disambiguate. K-means does a decent job by eye, but bad against senseval
+for the above-mentioned reasons.
+
+I started connecting the WSD code output with the word_categorizer, as
+the latter needs input from the former. 
+I think I'll store the word-sense centroids in a pickle file, which
+can later be read by the word categorizer.
