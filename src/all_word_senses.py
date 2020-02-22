@@ -1,3 +1,9 @@
+################################
+# Generates BERT embeddings for all words in xml file and clusters all of them
+# in an attempt to get word categories just from the embeddings.
+# It doesn't work very well. A different approach was tried in word_senser.py
+################################
+
 import pickle
 import xml.etree.ElementTree as ET
 import torch
@@ -5,28 +11,12 @@ import argparse
 import numpy as np
 
 from transformers import BertTokenizer, BertModel
-from sklearn.cluster import KMeans
-from sklearn.cluster import OPTICS, DBSCAN
-
+from sklearn.cluster import KMeans, OPTICS, DBSCAN
 from tqdm import tqdm, trange
 import warnings
 
+from BertModel import BERT
 warnings.filterwarnings('ignore')
-
-
-class BERT:
-
-    def __init__(self, device_number='cuda:2', use_cuda=True):
-        self.device_number = device_number
-        self.use_cuda = use_cuda
-
-        self.tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
-
-        self.model = BertModel.from_pretrained('bert-large-uncased', output_hidden_states=True)
-        self.model.eval()
-
-        if use_cuda:
-            self.model.to(device_number)
 
 
 class WordSenseModel:
@@ -36,7 +26,7 @@ class WordSenseModel:
         self.device_number = device_number
         self.use_cuda = use_cuda
 
-        self.Bert_Model = BERT(device_number, use_cuda)
+        self.Bert_Model = BERT(device_number=device_number, use_cuda=use_cuda)
 
     def open_xml_file(self, file_name):
 

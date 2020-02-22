@@ -1,5 +1,7 @@
 # Based on the code by Wiedemann et al. (2019, github.com/uhh-lt/bert-sense), and
 # modified for unsupervised word-sense disambiguation purposes
+# Tries to disambiguate words from sentences in XML file
+# Similar code that works with plain text sentences is tried in word_senser.py
 
 import os
 import pickle
@@ -9,27 +11,13 @@ import argparse
 import numpy as np
 import random as rand
 
-from transformers import BertTokenizer, BertModel
 from sklearn.cluster import KMeans, OPTICS, DBSCAN, cluster_optics_dbscan
-
 from tqdm import tqdm
 import warnings
 
+from BertModel import BERT
+
 warnings.filterwarnings('ignore')
-
-
-class BERT:
-    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, output_hidden_states=True):
-        self.device_number = device_number
-        self.use_cuda = use_cuda
-
-        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
-        self.model = BertModel.from_pretrained(pretrained_model, output_hidden_states=output_hidden_states)
-        with torch.no_grad():
-            self.model.eval()
-
-        if use_cuda:
-            self.model.to(device_number)
 
 
 class WordSenseModel:
@@ -321,7 +309,7 @@ if __name__ == '__main__':
         print("Processing all words below threshold")
 
     print("Loading WSD Model!")
-    WSD = WordSenseModel(args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
+    WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
     WSD.load_embeddings(args.pickle_file, args.corpus, args.mode)
