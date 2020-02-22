@@ -22,7 +22,7 @@ warnings.filterwarnings('ignore')
 class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
         self.sentences = []  # List of corpus textual sentences
-        self.vocab_map = {}  # Dictionary that stores coordinates of every occurrence of each word
+        self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
         self.embeddings = []  # Embeddings for all words in corpus
 
@@ -56,7 +56,7 @@ class WordSenseModel:
 
         return _final_layer
 
-    def load_embeddings(self, pickle_file_name, corpus_file):
+    def load_embeddings(self, pickle_file_name, corpus_file, func_frac):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
@@ -77,9 +77,14 @@ class WordSenseModel:
 
         except:
             print("Embedding File Not Found!! \n")
-            print("Performing first pass...")
 
-            self.calculate_embeddings(corpus_file)
+            print("Loading vocabulary")
+            self.get_vocabulary(corpus_file)
+            print(f"Removing the top {func_frac} fraction of words")
+            self.remove_function_words(func_frac)
+            print("Calculate embeddings...")
+            self.calculate_embeddings()
+
             with open(pickle_file_name, 'wb') as h:
                 _data = (self.sentences, self.vocab_map, self.embeddings)
                 pickle.dump(_data, h)
@@ -92,22 +97,45 @@ class WordSenseModel:
         :param tokenized_sent:
         :return:
         """
-        sentence = self.Bert_Model.tokenizer.convert_tokens_to_string(tokenized_sent)
+        sentence = self.Bert_Model.tokenizer.convert_tokens_to_string(tokenized_sent[1:-1])  # Ignore boundary tokens
         return sentence.split()
 
-    def calculate_embeddings(self, corpus_file):
+    def remove_function_words(self, functional_threshold):
         """
-        Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
+        Remove top words from vocabulary, assuming that most common words are functional words,
+        which we don't want to disambiguate
+        :param functional_threshold:    Fraction of words to remove
+        """
+        sorted_vocab = sorted(self.vocab_map.items(), key=lambda kv: len(kv[1]))  # Sort words by frequency
+        nbr_delete = int(len(sorted_vocab) * functional_threshold)  # Nbr of words to delete
+        self.vocab_map = dict(sorted_vocab[:-nbr_delete])  # Delete most common words
+
+    def get_vocabulary(self, corpus_file):
+        """
+        Reads all word instances in file, stores their location and vocabulary counts
         :param corpus_file:     file to get vocabulary
         """
-        fi = open(corpus_file, 'r')
+        with open(corpus_file, 'r') as fi:
+            # Process each sentence in corpus
+            for sent_nbr, sent in tqdm(enumerate(fi)):
+                bert_tokens = self.Bert_Model.tokenize_sent(sent)
+                self.sentences.append(bert_tokens)
+                words = self.get_words(bert_tokens)
+                # Store word counts in vocab_map
+                for word_pos, word in enumerate(words):
+                    if word not in self.vocab_map.keys():
+                        self.vocab_map[word] = []
+                    self.vocab_map[word].append((sent_nbr, word_pos))  # Register instance location
+
+    def calculate_embeddings(self):
+        """
+        Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
+        """
         stored_embeddings = 0
 
         # Process each sentence in corpus
-        for sent_nbr, sent in tqdm(enumerate(fi)):
+        for bert_tokens in self.sentences:
             sent_embeddings = []  # Store one sentence's word embeddings as elements
-            self.sentences.append(sent)
-            bert_tokens = self.Bert_Model.tokenize_sent(sent)
             words = self.get_words(bert_tokens)
             final_layer = self.get_bert_embeddings(bert_tokens)
 
@@ -116,25 +144,18 @@ class WordSenseModel:
             for word_pos, word in enumerate(words):
                 word_len = len(self.apply_bert_tokenizer(word))  # Handle subwords
 
-                if False:  # Don't store embedding if it's too frequent (function word)
-                    sent_embeddings.append(0)
-                else:
+                if word in self.vocab_map.keys():  # Store embeddings for vocab words
                     embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
                     sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
                     stored_embeddings += 1
-
-                    # Register word location in vocabulary dictionary
-                    if word not in self.vocab_map.keys():
-                        self.vocab_map[word] = []
-                    self.vocab_map[word].append((sent_nbr, word_pos))
+                else:
+                    sent_embeddings.append(0)
 
                 token_count += word_len
 
             # Store this sentence embeddings in the general list
             self.embeddings.append(sent_embeddings)
 
-        fi.close()
-        fk.close()
         print(f"{stored_embeddings} EMBEDDINGS STORED")
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, **kwargs):
@@ -227,7 +248,7 @@ class WordSenseModel:
                     fo.write('Samples:\n')
                     # Write sample sentences to file, with focus word in CAPS for easier reading
                     for sample, focus_word in sent_samples:
-                        bold_sent = self.sentences[sample].split()
+                        bold_sent = self.get_words(self.sentences[sample])
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
 
@@ -248,6 +269,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--corpus', type=str, required=True, help='Training Corpus')
     parser.add_argument('--threshold', type=int, default=2, help='Min freq of word to be disambiguated')
+    parser.add_argument('--func_frac', type=float, default=0.05, help='Top fraction of words considered functional')
     parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use in KMeans')
     parser.add_argument('--end_k', type=int, default=10, help='Final number of clusters to use in KMeans')
     parser.add_argument('--step_k', type=int, default=1, help='Increase in number of clusters to use')
@@ -271,7 +293,7 @@ if __name__ == '__main__':
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_embeddings(args.pickle_file, args.corpus)
+    WSD.load_embeddings(args.pickle_file, args.corpus, args.func_frac)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
