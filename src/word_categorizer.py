@@ -27,33 +27,53 @@ class WordCategorizer:
         self.vocab = []
         self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
         self.gold = []
+        self.senses = {}  # Stores words that have more than one sense, according to WSD pickle file
 
-    def load_vocabulary(self, vocab_filename):
+    def load_senses(self, pickle_senses):
         """
-        Reads vocabulary file. File format must be one word per line, no comments accepted.
-        :param vocab_filename:  Path to vocab file
+        Load ambiguous word senses, as stored by word_senser.py
+        :param pickle_senses:
+        :return:
+        """
+        with open(pickle_senses, 'rb') as fs:
+            self.senses = pickle.load(fs)
+
+    def load_vocabulary(self, vocab_txt=None, vocab_pickle=None):
+        """
+        Reads vocabulary file from txt or pickle file.
+        If text file, format must be one word per line, no comments accepted.
+        If pickle file, it must contain only a list of all words in vocabulary.
+        :param vocab_txt:       Path to txt vocab file
+        :param vocab_pickle:    Path to pickle vocab file
         :return:                None
         """
-        with open(vocab_filename, 'r') as fv:
-            lines = fv.read().splitlines()
-            for li in lines:
-                split_line = li.split()
-                self.vocab.append(split_line[0])  # Ignores POS labels if present
-                self.gold.append(split_line[-1])  # Saves gold standard labels if present
+        if vocab_txt:
+            with open(vocab_txt, 'r') as fv:
+                lines = fv.read().splitlines()
+                for li in lines:
+                    split_line = li.split()
+                    self.vocab.append(split_line[0])  # Ignores POS labels if present
+                    self.gold.append(split_line[-1])  # Saves gold standard labels if present
+        elif vocab_pickle:
+            with open(vocab_pickle, 'rb') as fv:
+                self.vocab = pickle.load(fv)
+                self.gold = None
+        else:
+            print("Need vocabulary file in text or pickle format")
+            exit()
 
-    def load_matrix(self, vocab_filename, sentences_filename, pickle_filename, num_masks=1, verbose=False, sparse_thres=-8):
+    def load_matrix(self, sentences_filename, pickle_emb, num_masks=1, verbose=False, sparse_thres=-8):
         """
         If pickle file is present, load data; else, calculate it.
-        :param vocab_filename:      File with vocabulary to categorize
         :param sentences_filename:  File with sentence to use as features for word categorization
-        :param pickle_filename:     File to store data
+        :param pickle_emb:          File to store/load embeddings
         :param num_masks:           If sentence prob is under this value, assign 0
         :param verbose:
         :param sparse_thres:        Cutoff to eliminate very low values and make sparse matrix
         :return:
         """
         try:
-            with open(pickle_filename, 'rb') as h:
+            with open(pickle_emb, 'rb') as h:
                 _data = pickle.load(h)
                 self.vocab = _data[0]
                 self.gold = _data[1]
@@ -67,14 +87,13 @@ class WordCategorizer:
             print("MATRIX File Not Found!! \n")
             print("Performing matrix calculation...")
 
-            self.load_vocabulary(vocab_filename)
             self.populate_matrix(sentences_filename, num_repl=num_masks, verbose=verbose, sparse_thres=sparse_thres)
 
-            with open(pickle_filename, 'wb') as h:
+            with open(pickle_emb, 'wb') as h:
                 _data = (self.vocab, self.gold, self.matrix, self.Bert_Model)
                 pickle.dump(_data, h)
 
-            print("Data stored in " + pickle_filename)
+            print("Data stored in " + pickle_emb)
 
     def populate_matrix(self, sents_filename, num_repl=1, sparse_thres=-4, verbose=False):
         """
@@ -91,7 +110,8 @@ class WordCategorizer:
             for sent in fs:
                 tokenized_sent = self.Bert_Model.tokenize_sent(sent)
                 # word_starts stores indexes where words begin (ignoring sub-words)
-                word_starts = [index for index, token in enumerate(tokenized_sent) if not token.startswith("##")]
+                word_starts = [index for index, token in enumerate(tokenized_sent) if not token.startswith("##")]  #
+                # TODO: Simplify this with convert_tokens_to_string
                 num_words = len(word_starts)
                 # Don't mask boundary tokens, sample same sentence with various masks (less than num_words)
                 replacements_pos = rand.sample(range(1, num_words - 1), min(num_words - 2, num_repl))
@@ -99,9 +119,14 @@ class WordCategorizer:
                     # Calculate sentence probability for each word in current replacement position
                     print(f"Evaluating sentence {tokenized_sent} replacing word "
                           f"{tokenized_sent[word_starts[repl_pos]:word_starts[repl_pos + 1]]}")
-                    sent_row = np.array(
-                        [self.process_sentence(tokenized_sent, word, repl_pos, word_starts, verbose=verbose)
-                         for word in self.vocab])
+                    # Build sentence embeddings, considering disambiguation
+                    sent_row = []
+                    for word in self.vocab:
+                        sent_row.extend(self.process_sentence(tokenized_sent, word, repl_pos, word_starts, verbose=verbose))
+                    # sent_row = np.array(
+                    #     [self.process_sentence(tokenized_sent, word, repl_pos, word_starts, verbose=verbose)
+                         # for word in self.vocab])
+                    sent_row = np.array(sent_row)
                     sent_row = sent_row * (sent_row > sparse_thres)  # Cut low probability values
                     self.matrix.append(sent_row)
                     num_sents += 1
@@ -113,19 +138,42 @@ class WordCategorizer:
         """
         Replaces word in repl_pos, incl. all subwords it may contain, for input word with subwords;
         then evaluates the sentence probability.
+        If word is ambiguous according to self.senses, then this instance is disambiguated, and the sentence
+        probability assigned to corresponding word-sense vector
         :param tokenized_sent: Input sentence
         :param word: Input word
         :param repl_pos: Word position to replace input word
         :param word_init: List with initial positions of each word in tokenized_sent
         :param verbose:
-        :return: curr_prob: Probability of current sentence
+        :return: curr_prob: Probability of current sentence, stored in the corresponding sense (if ambiguous)
         """
         # Following substitution handles removing sub-words, as well as inserting them
         word_tokens = self.Bert_Model.tokenizer.tokenize(word)
         replaced_sent = tokenized_sent[:word_init[repl_pos]] + word_tokens + tokenized_sent[word_init[repl_pos + 1]:]
         curr_prob = self.Bert_Model.get_sentence_prob_directional(replaced_sent, verbose=verbose)
 
-        return curr_prob
+        # Determine which word-sense vector gets the calculated prob
+        sense_centroids = self.senses.get(word, default=[0])
+        num_senses = len(sense_centroids)
+        prob_list = [0] * num_senses
+        sense_id = 0
+        if num_senses > 1:  # If word is ambiguous
+            sense_id = self.get_closest_sense(sense_centroids, replaced_sent, word)
+        prob_list[sense_id] = curr_prob
+
+        return prob_list
+
+    def get_closest_sense(self, sense_centroids, replaced_sent, word):
+        """
+        Calculates word embedding for word in replaced_sent, then determines which of the
+        sense centroids is closest to it.
+        :param sense_centroids:
+        :param replaced_sent:
+        :param word:
+        :return:                Index of closest centroid
+        """
+        return 0
+
 
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':
@@ -202,7 +250,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_cuda', action='store_true', help='Use GPU?')
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
-    parser.add_argument('--vocab', type=str, required=True, help='Vocabulary Corpus')
+    parser.add_argument('--vocab', type=str, required=False, help='Vocabulary Corpus')
     parser.add_argument('--masks', type=int, default=1, help='Min freq of word to be disambiguated')
     parser.add_argument('--sparse_thres', type=int, default=-8, help='Low log(prob) cut')
     parser.add_argument('--clusterer', type=str, default='KMeans', help='Clustering method to use')
@@ -211,14 +259,31 @@ if __name__ == '__main__':
     parser.add_argument('--steps_k', type=int, default=5, help='Step for clustering param exploration')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
-    parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file with embeddings/Save '
+    parser.add_argument('--pickle_WSD', type=str, required=False, help='Pickle file w/sense centroids')
+    parser.add_argument('--pickle_vocab', type=str, required=False, help='Pickle file w/vocabulary')
+    parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file with embeddings/Save '
                                                                                'embeddings to file')
     args = parser.parse_args()
 
     wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
     # Heavy part of the process: calculate sentence probabilities for each vocab word
+
+    if args.vocab:
+        print("Using annotated vocabulary file to categorize")
+        wc.load_vocabulary(vocab_txt=args.vocab)
+    elif args.pickle_vocab:
+        print(f"Using pickle vocabulary file to categorize")
+        wc.load_vocabulary(vocab_pickle=args.pickle_vocab)
+    else:
+        print("Vocabulary pickle or text file needed")
+        exit()
+
+    if args.pickle_WSD:
+        print("Word senses file found")
+        wc.load_senses(args.pickle_WSD)
+
     for _ in tqdm(range(1)):  # Time the process
-        wc.load_matrix(args.vocab, args.sentences, args.pickle_file, num_masks=args.masks, verbose=args.verbose,
+        wc.load_matrix(args.sentences, args.pickle_emb, num_masks=args.masks, verbose=args.verbose,
                        sparse_thres=args.sparse_thres)
 
     print("Start clustering...")
@@ -232,3 +297,4 @@ if __name__ == '__main__':
             print(f"\nEvaluation for k={curr_k}")
             fl.write(f"Evaluation for k={curr_k}\n")
             wc.eval_clusters(fl, cluster_labels)
+

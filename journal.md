@@ -575,3 +575,27 @@ I started connecting the WSD code output with the word_categorizer, as
 the latter needs input from the former. 
 I think I'll store the word-sense centroids in a pickle file, which
 can later be read by the word categorizer.
+
+Later: Implemented export of cluster centroids.
+
+****************
+## Feb 22, 2020
+Implemented word senser from plain text file, instead of xml file with
+word-sense disambiguation.
+This is needed for the real case where we're processing plain, unlabeled
+text.
+
+Placed XML senser in [word_senser_XML.py](src/word_senser_XML.py)
+
+************
+## Feb 23, 2020
+Created a small [WSD corpus](sentences/smallWSD_corpus.txt) and made ran experiments with the latest
+word_senser.py and different clusterings.
+OPTICS is not working at all in these cases, not sure why. It gives either
+0 or 1 clusters, even varying the max_eps distance parameter.
+KMeans clustering does a decent job disambiguating words in the new corpus.
+
+Next: Modify word_categorizer to take disambiguated sense and generate a
+different embedding per sense.
+
+TODO: Make sure only disambiguated words are exported in centroids

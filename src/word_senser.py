@@ -80,6 +80,9 @@ class WordSenseModel:
 
             print("Loading vocabulary")
             self.get_vocabulary(corpus_file)
+            with open(pickle_filename[:-6] + 'vocab', 'rb') as v:
+                pickle.dump(self.vocab_map.keys(), v)
+
             print(f"Removing the top {func_frac} fraction of words")
             self.remove_function_words(func_frac)
             print("Calculate embeddings...")
@@ -112,7 +115,7 @@ class WordSenseModel:
 
     def get_vocabulary(self, corpus_file):
         """
-        Reads all word instances in file, stores their location and vocabulary counts
+        Reads all word instances in file, stores their location
         :param corpus_file:     file to get vocabulary
         """
         with open(corpus_file, 'r') as fi:
