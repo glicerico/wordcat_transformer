@@ -56,18 +56,18 @@ class WordSenseModel:
 
         return _final_layer
 
-    def load_embeddings(self, pickle_file_name, corpus_file, func_frac):
+    def load_embeddings(self, pickle_filename, corpus_file, func_frac):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
           a) Stores sentences as an array.
           b) Creates dictionary where each vocabulary word is mapped to its occurrences in corpus.
           c) Calculates embeddings for each vocabulary word.
-        :param pickle_file_name
+        :param pickle_filename
         :param corpus_file
         """
         try:
-            with open(pickle_file_name, 'rb') as h:
+            with open(pickle_filename, 'rb') as h:
                 _data = pickle.load(h)
                 self.sentences = _data[0]
                 self.vocab_map = _data[1]
@@ -85,11 +85,11 @@ class WordSenseModel:
             print("Calculate embeddings...")
             self.calculate_embeddings()
 
-            with open(pickle_file_name, 'wb') as h:
+            with open(pickle_filename, 'wb') as h:
                 _data = (self.sentences, self.vocab_map, self.embeddings)
                 pickle.dump(_data, h)
 
-            print("Data stored in " + pickle_file_name)
+            print("Data stored in " + pickle_filename)
 
     def get_words(self, tokenized_sent):
         """
@@ -158,15 +158,15 @@ class WordSenseModel:
 
         print(f"{stored_embeddings} EMBEDDINGS STORED")
 
-    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, **kwargs):
+    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """
         Disambiguate word senses through clustering their transformer embeddings
         Clustering is done using the selected sklearn algorithm.
         If OPTICS method is used, then DBSCAN clusters are also obtained
-
         :param save_dir:        Directory to save disambiguated senses
         :param clust_method:    Clustering method used
         :param freq_threshold:  Frequency threshold for a word to be disambiguated
+        :param pickle_cent:     Pickle file to store cluster centroids
         :param kwargs:          Clustering parameters
         """
         # Use OPTICS estimator also to get DBSCAN clusters
@@ -211,6 +211,11 @@ class WordSenseModel:
             estimator.fit(curr_embeddings)  # Disambiguate
             self.cluster_centroids[word] = self.export_clusters(fl, save_to, word, estimator.labels_)
             self.write_predictions(fk, word, estimator.labels_, instances)
+
+        with open(pickle_cent, 'wb') as h:
+            pickle.dump(self.cluster_centroids, h)
+
+        print("Cluster centroids stored in " + pickle_cent)
 
         fl.write("\n")
         fl.close()
@@ -276,7 +281,8 @@ if __name__ == '__main__':
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--clustering', type=str, default='OPTICS', help='Clustering method to use')
-    parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
+    parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids '
+    parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
                                                                                'Embeddings to file')
 
     args = parser.parse_args()
@@ -293,11 +299,12 @@ if __name__ == '__main__':
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_embeddings(args.pickle_file, args.corpus, args.func_frac)
+    WSD.load_embeddings(args.pickle_emb, args.corpus, args.func_frac)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(args.save_to, clust_method=args.clustering, freq_threshold=args.threshold, k=nn)
+        WSD.disambiguate(args.save_to, clust_method=args.clustering, freq_threshold=args.threshold, k=nn,
+                         pickle_cent=args.pickle_cent)
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")
