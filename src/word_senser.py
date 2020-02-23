@@ -173,7 +173,7 @@ class WordSenseModel:
         if clust_method == 'OPTICS':
             min_samples = kwargs.get('min_samples', 1)
             # Init clustering object
-            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4, max_eps=0.4)
+            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4)
             save_to = save_dir + "_OPTICS_minsamp" + str(min_samples)
         elif clust_method == 'KMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
@@ -281,7 +281,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--clustering', type=str, default='OPTICS', help='Clustering method to use')
-    parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids '
+    parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
                                                                                'Embeddings to file')
 
