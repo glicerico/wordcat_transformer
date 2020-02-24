@@ -605,4 +605,4 @@ different embedding per sense.
 
 Word senser only exports embeddings for ambiguous words now.
 
-Implemented the use of WSD in the word categorizer
+Implemented the use of WSD in the word categorizer.

@@ -28,6 +28,7 @@ class WordCategorizer:
         self.Bert_WSD = WordSenseModel(pretrained_model, device_number, use_cuda)
 
         self.vocab = []
+        self.disamb_vocab = []  # List where word is repeated if ambiguous (for writing clusters)
         self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
         self.gold = []
         self.senses = {}  # Stores words that have more than one sense, according to WSD pickle file
@@ -78,7 +79,7 @@ class WordCategorizer:
         try:
             with open(pickle_emb, 'rb') as h:
                 _data = pickle.load(h)
-                self.vocab = _data[0]
+                self.disamb_vocab = _data[0]
                 self.gold = _data[1]
                 self.matrix = _data[2]
                 self.Bert_Model = _data[3]
@@ -93,7 +94,7 @@ class WordCategorizer:
             self.populate_matrix(sentences_filename, num_repl=num_masks, verbose=verbose, sparse_thres=sparse_thres)
 
             with open(pickle_emb, 'wb') as h:
-                _data = (self.vocab, self.gold, self.matrix, self.Bert_Model)
+                _data = (self.disamb_vocab, self.gold, self.matrix, self.Bert_Model)
                 pickle.dump(_data, h)
 
             print("Data stored in " + pickle_emb)
@@ -127,9 +128,6 @@ class WordCategorizer:
                     for word in self.vocab:
                         sent_row.extend(self.process_sentence(tokenized_sent, word, repl_pos, word_starts,
                                                               verbose=verbose))
-                    # sent_row = np.array(
-                    #     [self.process_sentence(tokenized_sent, word, repl_pos, word_starts, verbose=verbose)
-                         # for word in self.vocab])
                     sent_row = np.array(sent_row)
                     sent_row = sent_row * (sent_row > sparse_thres)  # Cut low probability values
                     self.matrix.append(sent_row)
@@ -161,10 +159,11 @@ class WordCategorizer:
         sense_centroids = self.senses.get(word, [0])  # If word not in ambiguous dict, return 1-item list
         num_senses = len(sense_centroids)
         prob_list = [0] * num_senses
+        self.disamb_vocab.extend([word] * num_senses)  # append word repetitions
         sense_id = 0
         if num_senses > 1:  # If word is ambiguous
-            sense_id = self.get_closest_sense(sense_centroids, replaced_sent, repl_pos[word_init],
-                                              repl_pos[word_init + 1])
+            sense_id = self.get_closest_sense(sense_centroids, replaced_sent, word_init[repl_pos],
+                                              word_init[repl_pos+ 1])
         prob_list[sense_id] = curr_prob  # Only instance with closest meaning contributes to vector
 
         return prob_list
@@ -181,7 +180,7 @@ class WordCategorizer:
         """
         final_layer = self.Bert_WSD.get_bert_embeddings(replaced_sent)
         embedding = np.mean(final_layer[word_start:word_end], 0)
-        distances = cosine_distances(embedding, sense_centroids)
+        distances = cosine_distances(embedding.reshape(1, -1), sense_centroids)
 
         return np.argmin(distances)
 
@@ -196,7 +195,7 @@ class WordCategorizer:
             estimator = DBSCAN(min_samples=min_samples, eps=eps, n_jobs=4, metric='cosine')
             estimator.fit(self.matrix)  # Cluster matrix
         elif method == 'OPTICS':
-            estimator = OPTICS(min_samples=3, metric='cosine', xi=0.02, n_jobs=4)
+            estimator = OPTICS(min_samples=3, metric='cosine', n_jobs=4)
             estimator.fit(self.matrix.toarray())  # Cluster matrix
         else:
             print("Clustering method not implemented...")
@@ -216,11 +215,9 @@ class WordCategorizer:
 
         # Write word categories to file
         append = "/" + method + "_" + str(clust_param)
-        # if not os.path.exists(save_to):
-        #     os.makedirs(save_to)
         with open(save_to + append + '.wordcat', "w") as fo:
             for i in range(-1, num_clusters):  # Also write unclustered words
-                cluster_members = [self.vocab[j] for j, k in enumerate(labels) if k == i]
+                cluster_members = [self.disamb_vocab[j] for j, k in enumerate(labels) if k == i]
                 fo.write(f"Cluster #{i}")
                 if len(cluster_members) > 0:  # Handle empty clusters
                     fo.write(": \n[")
@@ -269,7 +266,7 @@ class WordCategorizer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='WSD using Transformers')
-    parser.add_argument('--pretrained', type=str, default='bert-base-uncased', help='Pretrained model to use')
+    parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--use_cuda', action='store_true', help='Use GPU?')
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
@@ -289,6 +286,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
+    no_eval = False  # Flag to trigger evaluation
 
     if args.vocab:
         print("Using annotated vocabulary file to categorize")
@@ -296,6 +294,7 @@ if __name__ == '__main__':
     elif args.pickle_vocab:
         print(f"Using pickle vocabulary file to categorize")
         wc.load_vocabulary(vocab_pickle=args.pickle_vocab)
+        no_eval = True
     else:
         print("Vocabulary pickle or text file needed")
         exit()

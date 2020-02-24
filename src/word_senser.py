@@ -80,8 +80,8 @@ class WordSenseModel:
 
             print("Loading vocabulary")
             self.get_vocabulary(corpus_file)
-            with open(pickle_filename[:-6] + 'vocab', 'rb') as v:
-                pickle.dump(self.vocab_map.keys(), v)
+            with open(pickle_filename[:-6] + 'vocab', 'wb') as v:
+                pickle.dump(list(self.vocab_map.keys()), v)
 
             print(f"Removing the top {func_frac} fraction of words")
             self.remove_function_words(func_frac)
