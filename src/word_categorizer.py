@@ -7,12 +7,14 @@ import sys
 import numpy as np
 import random as rand
 from sklearn.cluster import KMeans, DBSCAN, OPTICS
+from sklearn.metrics.pairwise import cosine_distances
 from tqdm import tqdm
 from scipy import sparse
 
 # My modules
 sys.path.insert(0, os.path.abspath('../src'))
 from BertModel import BertLM
+from word_senser import WordSenseModel
 
 
 class WordCategorizer:
@@ -23,6 +25,7 @@ class WordCategorizer:
 
         print("Loading BERT model...")
         self.Bert_Model = BertLM(pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
+        self.Bert_WSD = WordSenseModel(pretrained_model, device_number, use_cuda)
 
         self.vocab = []
         self.matrix = []  # Stores sent probability for each word-sentence pair (rows are words)
@@ -122,7 +125,8 @@ class WordCategorizer:
                     # Build sentence embeddings, considering disambiguation
                     sent_row = []
                     for word in self.vocab:
-                        sent_row.extend(self.process_sentence(tokenized_sent, word, repl_pos, word_starts, verbose=verbose))
+                        sent_row.extend(self.process_sentence(tokenized_sent, word, repl_pos, word_starts,
+                                                              verbose=verbose))
                     # sent_row = np.array(
                     #     [self.process_sentence(tokenized_sent, word, repl_pos, word_starts, verbose=verbose)
                          # for word in self.vocab])
@@ -139,7 +143,8 @@ class WordCategorizer:
         Replaces word in repl_pos, incl. all subwords it may contain, for input word with subwords;
         then evaluates the sentence probability.
         If word is ambiguous according to self.senses, then this instance is disambiguated, and the sentence
-        probability assigned to corresponding word-sense vector
+        probability assigned to corresponding word-sense vector. Each instance only contributes to the
+        embedding vector of the closest sense.
         :param tokenized_sent: Input sentence
         :param word: Input word
         :param repl_pos: Word position to replace input word
@@ -153,27 +158,32 @@ class WordCategorizer:
         curr_prob = self.Bert_Model.get_sentence_prob_directional(replaced_sent, verbose=verbose)
 
         # Determine which word-sense vector gets the calculated prob
-        sense_centroids = self.senses.get(word, default=[0])
+        sense_centroids = self.senses.get(word, [0])  # If word not in ambiguous dict, return 1-item list
         num_senses = len(sense_centroids)
         prob_list = [0] * num_senses
         sense_id = 0
         if num_senses > 1:  # If word is ambiguous
-            sense_id = self.get_closest_sense(sense_centroids, replaced_sent, word)
-        prob_list[sense_id] = curr_prob
+            sense_id = self.get_closest_sense(sense_centroids, replaced_sent, repl_pos[word_init],
+                                              repl_pos[word_init + 1])
+        prob_list[sense_id] = curr_prob  # Only instance with closest meaning contributes to vector
 
         return prob_list
 
-    def get_closest_sense(self, sense_centroids, replaced_sent, word):
+    def get_closest_sense(self, sense_centroids, replaced_sent, word_start, word_end):
         """
         Calculates word embedding for word in replaced_sent, then determines which of the
         sense centroids is closest to it.
-        :param sense_centroids:
-        :param replaced_sent:
-        :param word:
+        :param sense_centroids: Centroids of current word's disambiguated senses
+        :param replaced_sent:   Tokenized sentence
+        :param word_start:      Position where word starts in replaced_sent
+        :param word_end:        Position where word ends in replaced_sent
         :return:                Index of closest centroid
         """
-        return 0
+        final_layer = self.Bert_WSD.get_bert_embeddings(replaced_sent)
+        embedding = np.mean(final_layer[word_start:word_end], 0)
+        distances = cosine_distances(embedding, sense_centroids)
 
+        return np.argmin(distances)
 
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':
@@ -191,7 +201,6 @@ class WordCategorizer:
         else:
             print("Clustering method not implemented...")
             exit(1)
-
 
         return estimator.labels_
 
@@ -221,6 +230,14 @@ class WordCategorizer:
                     fo.write(" is empty\n\n")
 
     def eval_clusters(self, logfile, pred):
+        """
+        Calculate F1 score for predicted categories, against gold standard.
+        Uses evaluation from AdaGram's test-all.py, where number of clusters
+        can differ btw predicted and gold answers.
+        :param logfile:
+        :param pred:
+        :return:
+        """
         if self.gold == self.vocab:
             print("Gold labels not present in vocabulary file. Can't evaluate!\n")
             return
@@ -232,10 +249,16 @@ class WordCategorizer:
             r = int_size / float(len(true_pairs))
             f_score = 2 * p * r / float(p + r)
             print(f"Fscore: {f_score}\n")
-            fl.write(f"FScore: {f_score}\n")
+            logfile.write(f"FScore: {f_score}\n")
 
     @staticmethod
     def get_pairs(labels):
+        """
+        Used by AdaGram's evaluation method.
+        Finds all possible pairs between members of the same cluster.
+        :param labels:
+        :return:
+        """
         result = []
         for label in np.unique(labels):
             ulabels = np.where(labels == label)[0]
@@ -266,7 +289,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
-    # Heavy part of the process: calculate sentence probabilities for each vocab word
 
     if args.vocab:
         print("Using annotated vocabulary file to categorize")
@@ -282,6 +304,7 @@ if __name__ == '__main__':
         print("Word senses file found")
         wc.load_senses(args.pickle_WSD)
 
+    # Heavy part of the process: calculate sentence probabilities for each vocab word
     for _ in tqdm(range(1)):  # Time the process
         wc.load_matrix(args.sentences, args.pickle_emb, num_masks=args.masks, verbose=args.verbose,
                        sparse_thres=args.sparse_thres)

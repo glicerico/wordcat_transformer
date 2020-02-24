@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 BOS_TOKEN = '[CLS]'
@@ -31,7 +32,7 @@ class BERT:
 
 class BertLM(BERT):
     def __init__(self, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
-        BERT.__init__(pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
+        BERT.__init__(self, pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
         self.model = BertForMaskedLM.from_pretrained(pretrained_model)
         with torch.no_grad():
             self.model.eval()

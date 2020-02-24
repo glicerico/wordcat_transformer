@@ -598,4 +598,11 @@ KMeans clustering does a decent job disambiguating words in the new corpus.
 Next: Modify word_categorizer to take disambiguated sense and generate a
 different embedding per sense.
 
-TODO: Make sure only disambiguated words are exported in centroids
+~~TODO: Make sure only disambiguated words are exported in centroids~~
+
+**************
+## Feb 24, 2020
+
+Word senser only exports embeddings for ambiguous words now.
+
+Implemented the use of WSD in the word categorizer

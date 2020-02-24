@@ -132,7 +132,7 @@ class WordSenseModel:
 
     def calculate_embeddings(self):
         """
-        Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
+        Calculates embeddings for all word instances in corpus_file
         """
         stored_embeddings = 0
 
@@ -212,7 +212,9 @@ class WordSenseModel:
 
             print(f'Disambiguating word \"{word}\"...')
             estimator.fit(curr_embeddings)  # Disambiguate
-            self.cluster_centroids[word] = self.export_clusters(fl, save_to, word, estimator.labels_)
+            curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
+            if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
+                self.cluster_centroids[word] = curr_centroids
             self.write_predictions(fk, word, estimator.labels_, instances)
 
         with open(pickle_cent, 'wb') as h:
@@ -261,8 +263,9 @@ class WordSenseModel:
                         fo.write(" ".join(bold_sent) + '\n')
 
                     # Calculate cluster centroid and save
-                    sense_embeddings = [self.embeddings[x][y] for x, y in sense_members]
-                    sense_centroids.append(np.mean(sense_embeddings, 0))
+                    if i >= 0:  # Don't calculate centroid for unclustered (noise) instances
+                        sense_embeddings = [self.embeddings[x][y] for x, y in sense_members]
+                        sense_centroids.append(np.mean(sense_embeddings, 0))
                 else:
                     fo.write(" is empty\n\n")
 
