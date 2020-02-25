@@ -22,10 +22,10 @@ class WordCategorizer:
 
         self.device_number = device_number
         self.use_cuda = use_cuda
+        self.pretrained_model = pretrained_model
 
-        print("Loading BERT model...")
-        self.Bert_Model = BertLM(pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
-        self.Bert_WSD = WordSenseModel(pretrained_model, device_number, use_cuda)
+        self.Bert_Model = None
+        self.Bert_WSD = None
 
         self.vocab = []
         self.disamb_vocab = []  # List where word is repeated if ambiguous (for writing clusters)
@@ -58,15 +58,26 @@ class WordCategorizer:
                     split_line = li.split()
                     self.vocab.append(split_line[0])  # Ignores POS labels if present
                     self.gold.append(split_line[-1])  # Saves gold standard labels if present
+            self.disamb_vocab = self.vocab[:]  # Simply a copy of vocab when no sense disambiguation
         elif vocab_pickle:
             with open(vocab_pickle, 'rb') as fv:
                 self.vocab = pickle.load(fv)
                 self.gold = None
+            self.build_disamb_vocab()
         else:
             print("Need vocabulary file in text or pickle format")
             exit()
 
-    def load_matrix(self, sentences_filename, pickle_emb, num_masks=1, verbose=False, sparse_thres=-8):
+    def build_disamb_vocab(self):
+        """
+        Build disambiguated vocabulary list: a list where every word occurs as many times as it has
+        been disambiguated in WSD pickle file
+        :return:
+        """
+        self.disamb_vocab = [[k] * len(v) for k, v in self.senses.items()]  # Build list of lists
+        self.disamb_vocab = list(itertools.chain.from_iterable(self.disamb_vocab))  # Flatten
+
+    def load_matrix(self, sentences_filename, pickle_emb, num_masks=1, verbose=False):  #, sparse_thres=-8):
         """
         If pickle file is present, load data; else, calculate it.
         :param sentences_filename:  File with sentence to use as features for word categorization
@@ -82,7 +93,6 @@ class WordCategorizer:
                 self.disamb_vocab = _data[0]
                 self.gold = _data[1]
                 self.matrix = _data[2]
-                self.Bert_Model = _data[3]
 
                 print("MATRIX FOUND!")
                 # print(self.matrix)
@@ -91,10 +101,15 @@ class WordCategorizer:
             print("MATRIX File Not Found!! \n")
             print("Performing matrix calculation...")
 
+            print("Loading BERT model...")
+            self.Bert_Model = BertLM(pretrained_model=self.pretrained_model, device_number=self.device_number,
+                                     use_cuda=self.use_cuda)
+            self.Bert_WSD = WordSenseModel(self.pretrained_model, self.device_number, self.use_cuda)
+
             self.populate_matrix(sentences_filename, num_repl=num_masks, verbose=verbose)#, sparse_thres=sparse_thres)
 
             with open(pickle_emb, 'wb') as h:
-                _data = (self.disamb_vocab, self.gold, self.matrix, self.Bert_Model)
+                _data = (self.disamb_vocab, self.gold, self.matrix)
                 pickle.dump(_data, h)
 
             print("Data stored in " + pickle_emb)
@@ -159,7 +174,6 @@ class WordCategorizer:
         sense_centroids = self.senses.get(word, [0])  # If word not in ambiguous dict, return 1-item list
         num_senses = len(sense_centroids)
         prob_list = [0] * num_senses
-        self.disamb_vocab.extend([word] * num_senses)  # append word repetitions
         sense_id = 0
         if num_senses > 1:  # If word is ambiguous
             sense_id = self.get_closest_sense(sense_centroids, replaced_sent, word_init[repl_pos],
@@ -187,7 +201,7 @@ class WordCategorizer:
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':
             k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
-            estimator = KMeans(n_clusters=int(k), n_jobs=4, n_init=10)
+            estimator = KMeans(n_clusters=int(k), n_jobs=4)
             estimator.fit(self.matrix)  # Cluster matrix
         elif method == 'DBSCAN':
             eps = kwargs.get('k', 0.2)
@@ -195,7 +209,7 @@ class WordCategorizer:
             estimator = DBSCAN(min_samples=min_samples, eps=eps, n_jobs=4, metric='cosine')
             estimator.fit(self.matrix)  # Cluster matrix
         elif method == 'OPTICS':
-            estimator = OPTICS(min_samples=3, metric='cosine', n_jobs=4)
+            estimator = OPTICS(min_samples=2, metric='cosine', n_jobs=4)
             estimator.fit(self.matrix.toarray())  # Cluster matrix
         else:
             print("Clustering method not implemented...")
@@ -288,13 +302,13 @@ if __name__ == '__main__':
     wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
     no_eval = False  # Flag to trigger evaluation
 
-    if args.vocab:
-        print("Using annotated vocabulary file to categorize")
-        wc.load_vocabulary(vocab_txt=args.vocab)
-    elif args.pickle_vocab:
+    if args.pickle_vocab:
         print(f"Using pickle vocabulary file to categorize")
         wc.load_vocabulary(vocab_pickle=args.pickle_vocab)
         no_eval = True
+    elif args.vocab:
+        print("Using annotated vocabulary file to categorize")
+        wc.load_vocabulary(vocab_txt=args.vocab)
     else:
         print("Vocabulary pickle or text file needed")
         exit()
@@ -307,6 +321,7 @@ if __name__ == '__main__':
     for _ in tqdm(range(1)):  # Time the process
         wc.load_matrix(args.sentences, args.pickle_emb, num_masks=args.masks, verbose=args.verbose)  #,
                        # sparse_thres=args.sparse_thres)
+    del wc.Bert_WSD, wc.Bert_Model, wc.senses  # Release memory
 
     print("Start clustering...")
     if not os.path.exists(args.save_to):

@@ -613,10 +613,29 @@ Running experiments overnight.
 
 Experiment with OPTICS gives good clusters, but several words are left 
 unclustered.
-Trying with KMeans gives out of memory error.
+~~Trying with KMeans gives out of memory error.~~ FIXED.
+
+A word on metrics: SKlearn KMeans implementation cannot use "cosine" distance.
+I'm using cosine distance in OPTICS.
 
 Checking ways to reduce memory use after the matrix has been built:
-- release both BERT models
+- release both BERT models: ~~TODO.~~ DONE
 - don't use sparse matrix. I think if there are no zero entries (we aren't
 using zero entries now) this consumes more memory? Maybe wait to change this.
-- once matrix is built, no need to hold centroids in memory.
+~~TODO.~~ DONE
+- once matrix is built, no need to hold centroids in memory. ~~TODO.~~ DONE
+
+Seems like memory problem comes from faulty matrix storage, not from
+above modules.
+However, good idea to not even load BERT modules and centroids when loading
+matrix from pickle: less time and memory consumption, for later larger runs.
+FIXED
+
+Word category formation runs take a very long time.
+SmallWSD run (16 sentences) takes about 12 hours in my laptop.
+19sentences.txt takes about 24 hours in nova.
+
+Finding ways to improve processing time.
+And results are still not properly tuned... so going through pipeline
+slowly with debugger, to make sure everything does what I expect, and
+check for speed improvements

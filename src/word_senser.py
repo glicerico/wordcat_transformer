@@ -52,7 +52,6 @@ class WordSenseModel:
                 _final_layer = _e3.cpu().numpy()
             else:
                 _final_layer = _e3.numpy()
-                _final_layer = np.around(_final_layer, decimals=5)  # LOWER PRECISION, process faster. TODO: Check!
 
         return _final_layer
 
@@ -124,7 +123,7 @@ class WordSenseModel:
                 bert_tokens = self.Bert_Model.tokenize_sent(sent)
                 self.sentences.append(bert_tokens)
                 words = self.get_words(bert_tokens)
-                # Store word counts in vocab_map
+                # Store word instances in vocab_map
                 for word_pos, word in enumerate(words):
                     if word not in self.vocab_map.keys():
                         self.vocab_map[word] = []
@@ -151,7 +150,7 @@ class WordSenseModel:
                     embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
                     sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
                     stored_embeddings += 1
-                else:
+                else:  # If word not in vocab of interest, just use placeholder
                     sent_embeddings.append(0)
 
                 token_count += word_len
@@ -163,7 +162,7 @@ class WordSenseModel:
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """
-        Disambiguate word senses through clustering their transformer embeddings
+        Disambiguate word senses through clustering their transformer embeddings.
         Clustering is done using the selected sklearn algorithm.
         If OPTICS method is used, then DBSCAN clusters are also obtained
         :param save_dir:        Directory to save disambiguated senses
@@ -201,13 +200,10 @@ class WordSenseModel:
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
-            curr_embeddings = []
-            for instance in instances:
-                x, y = instance  # Get current word instance coordinates
-                curr_embeddings.append(self.embeddings[x][y])
+            curr_embeddings = [self.embeddings[x][y] for x, y in instances]
 
             if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
-                print(f"Word \"{word}\" frequency out of threshold")
+                print(f"Word \"{word}\" frequency lower than threshold")
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
