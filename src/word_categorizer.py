@@ -316,7 +316,7 @@ if __name__ == '__main__':
             print(f"Clustering with k={curr_k}")
             cluster_labels = wc.cluster_words(method=args.clusterer, k=curr_k)
             wc.write_clusters(args.clusterer, args.save_to, cluster_labels, curr_k)
-            print(f"\nEvaluation for k={curr_k}")
-            fl.write(f"Evaluation for k={curr_k}\n")
-            wc.eval_clusters(fl, cluster_labels)
+            # print(f"\nEvaluation for k={curr_k}")
+            # fl.write(f"Evaluation for k={curr_k}\n")
+            # wc.eval_clusters(fl, cluster_labels)
 

@@ -606,3 +606,17 @@ different embedding per sense.
 Word senser only exports embeddings for ambiguous words now.
 
 Implemented the use of WSD in the word categorizer.
+Running experiments overnight.
+
+**********
+## Feb 25, 2020
+
+Experiment with OPTICS gives good clusters, but several words are left 
+unclustered.
+Trying with KMeans gives out of memory error.
+
+Checking ways to reduce memory use after the matrix has been built:
+- release both BERT models
+- don't use sparse matrix. I think if there are no zero entries (we aren't
+using zero entries now) this consumes more memory? Maybe wait to change this.
+- once matrix is built, no need to hold centroids in memory.
