@@ -9,7 +9,7 @@ import random as rand
 from sklearn.cluster import KMeans, DBSCAN, OPTICS
 from sklearn.metrics.pairwise import cosine_distances
 from tqdm import tqdm
-from scipy import sparse
+#from scipy import sparse
 
 # My modules
 sys.path.insert(0, os.path.abspath('../src'))
@@ -91,7 +91,7 @@ class WordCategorizer:
             print("MATRIX File Not Found!! \n")
             print("Performing matrix calculation...")
 
-            self.populate_matrix(sentences_filename, num_repl=num_masks, verbose=verbose, sparse_thres=sparse_thres)
+            self.populate_matrix(sentences_filename, num_repl=num_masks, verbose=verbose)#, sparse_thres=sparse_thres)
 
             with open(pickle_emb, 'wb') as h:
                 _data = (self.disamb_vocab, self.gold, self.matrix, self.Bert_Model)
@@ -99,7 +99,7 @@ class WordCategorizer:
 
             print("Data stored in " + pickle_emb)
 
-    def populate_matrix(self, sents_filename, num_repl=1, sparse_thres=-4, verbose=False):
+    def populate_matrix(self, sents_filename, num_repl=1, verbose=False):  #, sparse_thres=-4):
         """
         Calculates probability matrix for the sentence-word pairs
         :param sents_filename:  File with input sentences
@@ -128,13 +128,13 @@ class WordCategorizer:
                     for word in self.vocab:
                         sent_row.extend(self.process_sentence(tokenized_sent, word, repl_pos, word_starts,
                                                               verbose=verbose))
-                    sent_row = np.array(sent_row)
-                    sent_row = sent_row * (sent_row > sparse_thres)  # Cut low probability values
+                    # sent_row = np.array(sent_row)
+                    # sent_row = sent_row * (sent_row > sparse_thres)  # Cut low probability values
                     self.matrix.append(sent_row)
                     num_sents += 1
 
-        self.matrix = np.array(self.matrix).astype(np.float32)  # Reduce matrix precision, make rows be word-senses
-        self.matrix = sparse.csr_matrix(self.matrix.T)  # Convert to sparse matrix
+        self.matrix = np.array(self.matrix).astype(np.float32).T  # Reduce matrix precision, make rows be word-senses
+        # self.matrix = sparse.csr_matrix(self.matrix)  # Convert to sparse matrix
 
     def process_sentence(self, tokenized_sent, word, repl_pos, word_init, verbose=False):
         """
@@ -272,7 +272,7 @@ if __name__ == '__main__':
     parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
     parser.add_argument('--vocab', type=str, required=False, help='Vocabulary Corpus')
     parser.add_argument('--masks', type=int, default=1, help='Min freq of word to be disambiguated')
-    parser.add_argument('--sparse_thres', type=int, default=-8, help='Low log(prob) cut')
+    # parser.add_argument('--sparse_thres', type=int, default=-8, help='Low log(prob) cut')
     parser.add_argument('--clusterer', type=str, default='KMeans', help='Clustering method to use')
     parser.add_argument('--start_k', type=float, default=10, help='Initial value of clustering param')
     parser.add_argument('--end_k', type=float, default=10, help='Final value of clustering param')
@@ -305,8 +305,8 @@ if __name__ == '__main__':
 
     # Heavy part of the process: calculate sentence probabilities for each vocab word
     for _ in tqdm(range(1)):  # Time the process
-        wc.load_matrix(args.sentences, args.pickle_emb, num_masks=args.masks, verbose=args.verbose,
-                       sparse_thres=args.sparse_thres)
+        wc.load_matrix(args.sentences, args.pickle_emb, num_masks=args.masks, verbose=args.verbose)  #,
+                       # sparse_thres=args.sparse_thres)
 
     print("Start clustering...")
     if not os.path.exists(args.save_to):
