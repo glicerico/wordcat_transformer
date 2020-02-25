@@ -639,3 +639,8 @@ Finding ways to improve processing time.
 And results are still not properly tuned... so going through pipeline
 slowly with debugger, to make sure everything does what I expect, and
 check for speed improvements
+
+Looking at the embeddings for word_senser, Ben is right that they do not
+necessarily work for WSD. They seem different, even for almost identical
+uses of the word, even in same sentence.
+It's curious that KMeans still can disambiguate them decently.

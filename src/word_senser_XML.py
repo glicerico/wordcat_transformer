@@ -141,7 +141,7 @@ class WordSenseModel:
             bert_tokens = self.collect_bert_tokens(sent)
             final_layer = self.get_bert_embeddings(bert_tokens)
 
-            token_count = 1
+            token_count = 1  # Start from 1: ignore '[CLS]' embedding
             # Process all words in sentence
             for word_pos, j in enumerate(zip(sent, senses)):
                 word = j[0]
