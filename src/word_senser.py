@@ -195,7 +195,6 @@ class WordSenseModel:
             os.makedirs(save_to)
         fl = open(save_to + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
-        fk = open(save_to + "/disamb.pred", 'w')  # Predictions for evaluation against GOLD
 
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
@@ -211,7 +210,6 @@ class WordSenseModel:
             curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
             if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
                 self.cluster_centroids[word] = curr_centroids
-            self.write_predictions(fk, word, estimator.labels_, instances)
 
         with open(pickle_cent, 'wb') as h:
             pickle.dump(self.cluster_centroids, h)
@@ -220,12 +218,6 @@ class WordSenseModel:
 
         fl.write("\n")
         fl.close()
-        fk.close()
-
-    @staticmethod
-    def write_predictions(fk, word, labels, instances):
-        for count, label in enumerate(labels):
-            fk.write(f"{word} {count} {label}\n")
 
     def export_clusters(self, fl, save_dir, word, labels):
         """
