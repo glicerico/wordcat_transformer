@@ -15,7 +15,7 @@ Thus, Ben proposes to use external statistical methods to "milk" BERT the syntac
 relationships that we are looking for.
 
 Based on the code by Wiedemann et al. (2019, github.com/uhh-lt/bert-sense), I 
-first updated [Bert_Model.py](src/Bert_Model.py) to use the latest huggingface transformers models 
+first updated [Bert_Model.py](../src/BERT_Model.py) to use the latest huggingface transformers models 
 (github.com/huggingface/transformers) and to be able to run without CUDA 
 (fixed a bug).
 The obtained results were not exactly the same as their paper, but quite close.
@@ -26,7 +26,7 @@ in the corpus, then cluster them and hope that word categories will appear
 as a result.
 This idea is coming from the previous use of word2vec and AdaGram vectors
 for word categorization. 
-The code for this attempt is at [all_word_senses.py](src/all_word_senses.py).
+The code for this attempt is at [all_word_senses.py](../src/all_word_senses.py).
 Some of the design decisions made were:
 - Use the concatenation of the last 4 attention layers for embeddings, 
 like bert-sense and the original BERT paper (Devlin et al 2018).
@@ -62,7 +62,7 @@ in sentence probabilities between each word and other words.
 4) Cluster the vectors to form word categories. Use a Clark-like clustering
 method, where not all word-senses will be categorized.
 
-Current work is to implement step 1) above in [word_senser.py](src/word-senser.py), 
+Current work is to implement step 1) above in [word_senser.py](../src/word_senser.py), 
 using the following steps:
 - First pass
    3) Store sentences in corpus in order 
@@ -80,7 +80,7 @@ using the following steps:
 There's a working implementation of WSD in word_senser.py
 
 After experimenting with 
-[senseval2_lexical_sample_train](../UFSAC/corpus/ufsac-public-2.1/senseval2_lexical_sample_test.xml), 
+[senseval2_lexical_sample_train](../../UFSAC/corpus/ufsac-public-2.1/senseval2_lexical_sample_test.xml), 
 I notice that memory consumption is quite large using
 the concatenation of the last 4 hidden states.
 In order to keep testing in my laptop, I change to using ~~only the 4th to last
@@ -140,7 +140,7 @@ not considered ambiguous in other sentences.
  
  **************
  
- Modified AdaGram's [test-all.py](src/test-all.py) to evaluate the
+ Modified AdaGram's [test-all.py](../src/test-all.py) to evaluate the
  disambiguation results.
  TODO: Fix problem causing division by zero, and evaluate results in nova.
  
@@ -165,7 +165,7 @@ not considered ambiguous in other sentences.
  have a high probability of occurring in predictions for different clusters.
  
  First try with just a few sentences, clustered with KMeans, in 
- [wordcat_bert.ipynb](notebooks/wordcat_bert.ipynb).
+ [wordcat_bert.ipynb](../notebooks/wordcat_bert.ipynb).
  Masked words are only adjectives, personal nouns, location nouns.
  Obtained word categories look quite decent, and of course the granularity
  depends on the number of clusters used:
@@ -257,7 +257,7 @@ In this example, 6 clusters seems like the best result with the above sentences.
  
  ********
  Also tried masking every word in the above sentences and clustering that way.
- Results can be found in [wordcat_funcs.ipynb](notebooks/wordcat_funcs.ipynb).
+ Results can be found in [wordcat_funcs.ipynb](../notebooks/wordcat_funcs.ipynb).
  The categories are not as crisp and in the former, simpler case... they
  contain some noisy results.
  
@@ -287,10 +287,10 @@ above (a factor of around `V*avg_l` more evaluations, where V is the size of the
 vocabulary, and `avg_l` is the average sentence length).
 However, it seems intuitive that his approach should work better.
 This approach would require a separate sense disambiguation, though... perhaps
-the one implemented in [word_senser.py](src/word_senser.py).
+the one implemented in [word_senser.py](../src/word_senser.py).
 
 ********
-While reviewing code in [Bert_as_LM.ipynb](notebooks/Bert_as_LM.ipynb), I
+While reviewing code in [Bert_as_LM.ipynb](../notebooks/Bert_as_LM.ipynb), I
 notice that the normalized sentence probability is taking the sentence length
 as the number of sub-words.
 For most words, the sub-words have normally quite high probability, so this
@@ -342,11 +342,11 @@ Normalized sentence prob: log(P(sentence)) / sent_length: -0.9733260146209172
 TODO: Handle subwords differently
 
 **************
-File [word_categorizer.py](src/word_categorizer.py) contains the current
+File [word_categorizer.py](../src/word_categorizer.py) contains the current
 attempt with Ben's approach discussed above.
 
 Some notes:
-- Start with simple English vocab (some files in [vocabularies](vocabularies))
+- Start with simple English vocab (some files in [vocabularies](../vocabularies))
 - Start with small number of sentences.
 - Probably should use sparse vectors and assign very low sentence probs
  (below some threshold) as zeros: ~~TODO~~ Done, but doesn't seem to make
@@ -362,8 +362,8 @@ Some notes:
  Need an evaluation measure for the word categories.
  Following a [list of words by POS](https://www.english-grammar-revolution.com/word-lists.html),
  I create a gold standard to evaluate the obtained categories.
- Labeled words per category are in [POS](vocabularies/POS) directory.
- The file [POS_unambiguous.vocab](vocabularies/POS_unambiguous.vocab)
+ Labeled words per category are in [POS](../vocabularies/POS) directory.
+ The file [POS_unambiguous.vocab](../vocabularies/POS_unambiguous.vocab)
  contains these words, eliminating all words appearing in more than one
  category, to avoid dealing with ambiguity for now.
  
@@ -500,7 +500,7 @@ and I would get the probability of `P([MASK]=answered)` from applying
 softmax to the output of the last layer in BERT.
 
 This approach, which grows the sentence gradually, was attempted in
-[a notebook](notebooks/Bert_as_LM_unidirectional-fail.ipynb), but seems
+[a notebook](../notebooks/Bert_as_LM_unidirectional-fail.ipynb), but seems
 failed to me.
 Since the sentences fed into BERT are sub-parts of the original one
 and would be quite different it, the probabilities are really off.
@@ -516,7 +516,7 @@ I would feed the sentence
 and again I take the probability of `P([MASK]=answered)` from applying
 softmax to the output of the last layer in BERT.
 This is the approach taken in 
-[this notebook](notebooks/Bert_as_LM_unidirectional.ipynb), which
+[this notebook](../notebooks/Bert_as_LM_unidirectional.ipynb), which
 seems to make a lot more sense probabilistically.
 
 *******
@@ -524,7 +524,7 @@ seems to make a lot more sense probabilistically.
 Also, the probability of a sentence as calculated above would grow with the 
 sentence length. 
 Hence, I decide to use some normalization.
-Previously, as in [this notebook](notebooks/Bert_as_LM.ipynb) I was actually
+Previously, as in [this notebook](../notebooks/Bert_as_LM.ipynb) I was actually
 calculating the logarithm of the sentence probability, divided by the length
 of the sentence, i.e. `log(P(S))/len(S)`.
 This is equivalent to the logarithm of the geometric average of the
@@ -534,7 +534,7 @@ the geometric average of the components of the probability estimation:
 ```
 P_forward(he ran .) = (P(he) * P(he ran| he) * P(he ran .|he ran)) ^ (1/3)
 ```
-[This notebook](notebooks/Bert_as_LM_unidirectional.ipynb) contains calculations
+[This notebook](../notebooks/Bert_as_LM_unidirectional.ipynb) contains calculations
 performed this way.
 It doesn't make as much sense as the previous attempt, because sentences like
 `The steak was eaten by the man`, and `The steak ate the man` are not too dissimilar.
@@ -585,11 +585,11 @@ word-sense disambiguation.
 This is needed for the real case where we're processing plain, unlabeled
 text.
 
-Placed XML senser in [word_senser_XML.py](src/word_senser_XML.py)
+Placed XML senser in [word_senser_XML.py](../src/word_senser_XML.py)
 
 ************
 ## Feb 23, 2020
-Created a small [WSD corpus](sentences/smallWSD_corpus.txt) and made ran experiments with the latest
+Created a small [WSD corpus](../sentences/smallWSD_corpus.txt) and made ran experiments with the latest
 word_senser.py and different clusterings.
 OPTICS is not working at all in these cases, not sure why. It gives either
 0 or 1 clusters, even varying the max_eps distance parameter.

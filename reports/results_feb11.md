@@ -2,9 +2,9 @@ Here's a sample of the word category formation results using words as
 vectors, where each vector dimension is the probability of a given 
 sentence (with a blank in a fixed position) when the current word is 
 placed in the blank location, as Ben suggested.
-The vocabulary to categorize is [here](vocabularies/POS_unambiguous.vocab),
+The vocabulary to categorize is [here](../vocabularies/POS_unambiguous.vocab),
 and the sentences used to create the features are 
-[here](sentences/19sentences.txt).
+[here](../sentences/19sentences.txt).
 The labels in the vocabulary were used to evaluate the clustering
 (using F1 measure).
 
