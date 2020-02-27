@@ -101,9 +101,10 @@ class WordCategorizer:
             print("MATRIX File Not Found!! \n")
             print("Performing matrix calculation...")
 
-            print("Loading BERT model...")
+            print("Loading BertForMaskedLM model...")
             self.Bert_Model = BertLM(pretrained_model=self.pretrained_model, device_number=self.device_number,
                                      use_cuda=self.use_cuda)
+            print("Loading BERT model...")
             self.Bert_WSD = WordSenseModel(self.pretrained_model, self.device_number, self.use_cuda)
 
             self.populate_matrix(sentences_filename, num_repl=num_masks, verbose=verbose)#, sparse_thres=sparse_thres)
@@ -210,7 +211,7 @@ class WordCategorizer:
             estimator.fit(self.matrix)  # Cluster matrix
         elif method == 'OPTICS':
             estimator = OPTICS(min_samples=2, metric='cosine', n_jobs=4)
-            estimator.fit(self.matrix.toarray())  # Cluster matrix
+            estimator.fit(self.matrix)  # Cluster matrix
         else:
             print("Clustering method not implemented...")
             exit(1)
@@ -290,7 +291,7 @@ if __name__ == '__main__':
     parser.add_argument('--clusterer', type=str, default='KMeans', help='Clustering method to use')
     parser.add_argument('--start_k', type=float, default=10, help='Initial value of clustering param')
     parser.add_argument('--end_k', type=float, default=10, help='Final value of clustering param')
-    parser.add_argument('--steps_k', type=int, default=5, help='Step for clustering param exploration')
+    parser.add_argument('--steps_k', type=int, default=1, help='Step for clustering param exploration')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
     parser.add_argument('--pickle_WSD', type=str, required=False, help='Pickle file w/sense centroids')

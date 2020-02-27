@@ -644,3 +644,40 @@ Looking at the embeddings for word_senser, Ben is right that they do not
 necessarily work for WSD. They seem different, even for almost identical
 uses of the word, even in same sentence.
 It's curious that KMeans still can disambiguate them decently.
+
+************
+## Feb 26, 2020
+Wrote [report](report_feb26.md) about current status:
+```
+I added handling of sub-words, modified the way sentence probabilities
+are calculated, and integrated disambiguation into the pipeline.
+After these changes, the clusters obtained are still good, but several
+words are still uncategorized.
+```
+
+***********
+## Feb 27, 2020
+Made some tests on current processing time.
+I had the impression that past runs were not scaling properly.
+After a few timing experiments, I noticed I was misestimating.
+Actually, scaling is as expected: smallWSD corpus with 15 sentences and
+10 masks should last around 9 hours, as observed (more or less).
+
+Potential efficiency improvements:
+Calculate sentence probabilities for a sentence more cleverly:
+many of the BERT evaluations are repeated in the same sentence.
+I.e. when evaluating the forward and backward probability, many of the
+passes do not involve the current word being evaluated, so they can be 
+reused.
+E.g. when evaluating `This is a ______ sentence .`, for each vocabulary
+word I currently evaluate `P(w_0 = This| MASK MASK MASK MASK MASK MASK)`.
+This (and many others) could immediately be reused by any of the vocabulary
+word evaluations.
+I think I could cut evaluation at least by half with this.
+
+TODO: Find a clever way to calculate sentence probabilities for all the
+vocabulary.
+
+Also, other sentences could benefit from some of these evaluations if they
+were saved.
+Ben suggested using [tries]()
