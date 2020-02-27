@@ -281,10 +281,10 @@ class WordCategorizer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='WSD using Transformers')
+    parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--use_cuda', action='store_true', help='Use GPU?')
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
-    parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
     parser.add_argument('--vocab', type=str, required=False, help='Vocabulary Corpus')
     parser.add_argument('--masks', type=int, default=1, help='Min freq of word to be disambiguated')
     # parser.add_argument('--sparse_thres', type=int, default=-8, help='Low log(prob) cut')
