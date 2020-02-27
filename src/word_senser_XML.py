@@ -1,16 +1,17 @@
 # Based on the code by Wiedemann et al. (2019, github.com/uhh-lt/bert-sense), and
 # modified for unsupervised word-sense disambiguation purposes
-# Tries to disambiguate words from sentences in plain text file.
-# Similar code that works with xml file sentences is tried in word_senser_XML.py
+# Tries to disambiguate words from sentences in XML file
+# Similar code that works with plain text sentences is tried in word_senser.py
 
 import os
 import pickle
+import xml.etree.ElementTree as ET
 import torch
 import argparse
 import numpy as np
 import random as rand
 
-from sklearn.cluster import KMeans, OPTICS, DBSCAN
+from sklearn.cluster import KMeans, OPTICS, DBSCAN, cluster_optics_dbscan
 from tqdm import tqdm
 import warnings
 
@@ -22,7 +23,7 @@ warnings.filterwarnings('ignore')
 class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
         self.sentences = []  # List of corpus textual sentences
-        self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
+        self.vocab_map = {}  # Dictionary that stores coordinates of every occurrence of each word
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
         self.embeddings = []  # Embeddings for all words in corpus
 
@@ -31,8 +32,42 @@ class WordSenseModel:
 
         self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
 
+    @staticmethod
+    def open_xml_file(file_name):
+        tree = ET.parse(file_name)
+        root = tree.getroot()
+
+        return root, tree
+
+    @staticmethod
+    def semeval_sent_sense_collect(xml_struct):
+        _sent = []
+        _sent1 = ""
+        _senses = []
+        for idx, j in enumerate(xml_struct.iter('word')):
+            _temp_dict = j.attrib
+            words = _temp_dict['surface_form'].lower()
+            if '*' not in words:
+                _sent1 += words + " "
+                _sent.extend([words])
+                if 'wn30_key' in _temp_dict:
+                    _senses.extend([_temp_dict['wn30_key'].split(';')[0]] * len([words]))  # Keep 1st sense only
+                else:
+                    _senses.extend([0] * len([words]))
+
+        return _sent, _sent1, _senses
+
     def apply_bert_tokenizer(self, word):
         return self.Bert_Model.tokenizer.tokenize(word)
+
+    def collect_bert_tokens(self, _sent):
+        _bert_tokens = ['[CLS]', ]
+        for idx, j in enumerate(_sent):
+            _tokens = self.apply_bert_tokenizer(_sent[idx])
+            _bert_tokens.extend(_tokens)
+        _bert_tokens.append('[SEP]')
+
+        return _bert_tokens
 
     def get_bert_embeddings(self, tokens):
         _ib = self.Bert_Model.tokenizer.convert_tokens_to_ids(tokens)
@@ -52,21 +87,23 @@ class WordSenseModel:
                 _final_layer = _e3.cpu().numpy()
             else:
                 _final_layer = _e3.numpy()
+                _final_layer = np.around(_final_layer, decimals=5)  # LOWER PRECISION, process faster. TODO: Check!
 
         return _final_layer
 
-    def load_embeddings(self, pickle_filename, corpus_file, func_frac):
+    def load_embeddings(self, pickle_file_name, corpus_file, mode):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
           a) Stores sentences as an array.
           b) Creates dictionary where each vocabulary word is mapped to its occurrences in corpus.
           c) Calculates embeddings for each vocabulary word.
-        :param pickle_filename
+        :param pickle_file_name
         :param corpus_file
+        :param mode:            Determine if only gold-ambiguous words are stored
         """
         try:
-            with open(pickle_filename, 'rb') as h:
+            with open(pickle_file_name, 'rb') as h:
                 _data = pickle.load(h)
                 self.sentences = _data[0]
                 self.vocab_map = _data[1]
@@ -76,106 +113,81 @@ class WordSenseModel:
 
         except:
             print("Embedding File Not Found!! \n")
+            print("Performing first pass...")
 
-            print("Loading vocabulary")
-            self.get_vocabulary(corpus_file)
-            with open(pickle_filename[:-6] + 'vocab', 'wb') as v:
-                pickle.dump(list(self.vocab_map.keys()), v)
-
-            print(f"Removing the top {func_frac} fraction of words")
-            self.remove_function_words(func_frac)
-            print("Calculate embeddings...")
-            self.calculate_embeddings()
-
-            with open(pickle_filename, 'wb') as h:
+            self.calculate_embeddings(corpus_file, mode)
+            with open(pickle_file_name, 'wb') as h:
                 _data = (self.sentences, self.vocab_map, self.embeddings)
                 pickle.dump(_data, h)
 
-            print("Data stored in " + pickle_filename)
+            print("Data stored in " + pickle_file_name)
 
-    def get_words(self, tokenized_sent):
+    def calculate_embeddings(self, corpus_file, mode):
         """
-        Returns the complete words in a BERT-tokenized sentence (merges sub-words)
-        :param tokenized_sent:
-        :return:
-        """
-        sentence = self.Bert_Model.tokenizer.convert_tokens_to_string(tokenized_sent[1:-1])  # Ignore boundary tokens
-        return sentence.split()
-
-    def remove_function_words(self, functional_threshold):
-        """
-        Remove top words from vocabulary, assuming that most common words are functional words,
-        which we don't want to disambiguate
-        :param functional_threshold:    Fraction of words to remove
-        """
-        sorted_vocab = sorted(self.vocab_map.items(), key=lambda kv: len(kv[1]))  # Sort words by frequency
-        nbr_delete = int(len(sorted_vocab) * functional_threshold)  # Nbr of words to delete
-        self.vocab_map = dict(sorted_vocab[:-nbr_delete])  # Delete most common words
-
-    def get_vocabulary(self, corpus_file):
-        """
-        Reads all word instances in file, stores their location
+        Calculates embeddings for all words in corpus_file, creates vocabulary dictionary
         :param corpus_file:     file to get vocabulary
+        :param mode:            Determine if only gold-ambiguous words are stored
         """
-        with open(corpus_file, 'r') as fi:
-            # Process each sentence in corpus
-            for sent_nbr, sent in tqdm(enumerate(fi)):
-                bert_tokens = self.Bert_Model.tokenize_sent(sent)
-                self.sentences.append(bert_tokens)
-                words = self.get_words(bert_tokens)
-                # Store word instances in vocab_map
-                for word_pos, word in enumerate(words):
-                    if word not in self.vocab_map.keys():
-                        self.vocab_map[word] = []
-                    self.vocab_map[word].append((sent_nbr, word_pos))  # Register instance location
-
-    def calculate_embeddings(self):
-        """
-        Calculates embeddings for all word instances in corpus_file
-        """
+        _test_root, _test_tree = self.open_xml_file(corpus_file)
         stored_embeddings = 0
+        fk = open(corpus_file[:-3] + 'key', 'w')  # Key to GOLD word senses
+        inst_counter = 0  # Useless instance counter needed for evaluator
 
         # Process each sentence in corpus
-        for bert_tokens in self.sentences:
+        for sent_nbr, i in tqdm(enumerate(_test_root.iter('sentence'))):
             sent_embeddings = []  # Store one sentence's word embeddings as elements
-            words = self.get_words(bert_tokens)
+            sent, sent1, senses = self.semeval_sent_sense_collect(i)
+            self.sentences.append(sent1)
+            bert_tokens = self.collect_bert_tokens(sent)
             final_layer = self.get_bert_embeddings(bert_tokens)
 
             token_count = 1  # Start from 1: ignore '[CLS]' embedding
             # Process all words in sentence
-            for word_pos, word in enumerate(words):
+            for word_pos, j in enumerate(zip(sent, senses)):
+                word = j[0]
+                sense = j[1]
                 word_len = len(self.apply_bert_tokenizer(word))  # Handle subwords
 
-                if word in self.vocab_map.keys():  # Store embeddings for vocab words
+                if mode == 'eval_only' and sense == 0:  # Don't store embedding if it's not gold-ambiguous
+                    sent_embeddings.append(0)
+                else:
+                    # Save sense in key file
+                    fk.write(f"{word} {inst_counter} {sense}\n")
+                    inst_counter += 1
+
                     embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
                     sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
                     stored_embeddings += 1
-                else:  # If word not in vocab of interest, just use placeholder
-                    sent_embeddings.append(0)
+
+                    # Register word location in vocabulary dictionary
+                    if word not in self.vocab_map.keys():
+                        self.vocab_map[word] = []
+                    self.vocab_map[word].append((sent_nbr, word_pos))
 
                 token_count += word_len
 
             # Store this sentence embeddings in the general list
             self.embeddings.append(sent_embeddings)
 
+        fk.close()
         print(f"{stored_embeddings} EMBEDDINGS STORED")
 
-    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
+    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, **kwargs):
         """
-        Disambiguate word senses through clustering their transformer embeddings.
+        Disambiguate word senses through clustering their transformer embeddings
         Clustering is done using the selected sklearn algorithm.
         If OPTICS method is used, then DBSCAN clusters are also obtained
+
         :param save_dir:        Directory to save disambiguated senses
         :param clust_method:    Clustering method used
         :param freq_threshold:  Frequency threshold for a word to be disambiguated
-        :param pickle_cent:     Pickle file to store cluster centroids
         :param kwargs:          Clustering parameters
         """
         # Use OPTICS estimator also to get DBSCAN clusters
         if clust_method == 'OPTICS':
             min_samples = kwargs.get('min_samples', 1)
             # Init clustering object
-            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4)
+            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4, max_eps=0.4)
             save_to = save_dir + "_OPTICS_minsamp" + str(min_samples)
         elif clust_method == 'KMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
@@ -195,29 +207,33 @@ class WordSenseModel:
             os.makedirs(save_to)
         fl = open(save_to + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
+        fk = open(save_to + "/disamb.pred", 'w')  # Predictions for evaluation against GOLD
 
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
-            curr_embeddings = [self.embeddings[x][y] for x, y in instances]
+            curr_embeddings = []
+            for instance in instances:
+                x, y = instance  # Get current word instance coordinates
+                curr_embeddings.append(self.embeddings[x][y])
 
             if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
-                print(f"Word \"{word}\" frequency lower than threshold")
+                print(f"Word \"{word}\" frequency out of threshold")
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
             estimator.fit(curr_embeddings)  # Disambiguate
-            curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
-            if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
-                self.cluster_centroids[word] = curr_centroids
-
-        with open(pickle_cent, 'wb') as h:
-            pickle.dump(self.cluster_centroids, h)
-
-        print("Cluster centroids stored in " + pickle_cent)
+            self.cluster_centroids[word] = self.export_clusters(fl, save_to, word, estimator.labels_)
+            self.write_predictions(fk, word, estimator.labels_, instances)
 
         fl.write("\n")
         fl.close()
+        fk.close()
+
+    @staticmethod
+    def write_predictions(fk, word, labels, instances):
+        for count, label in enumerate(labels):
+            fk.write(f"{word} {count} {label}\n")
 
     def export_clusters(self, fl, save_dir, word, labels):
         """
@@ -246,14 +262,13 @@ class WordSenseModel:
                     fo.write('Samples:\n')
                     # Write sample sentences to file, with focus word in CAPS for easier reading
                     for sample, focus_word in sent_samples:
-                        bold_sent = self.get_words(self.sentences[sample])
+                        bold_sent = self.sentences[sample].split()
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
 
                     # Calculate cluster centroid and save
-                    if i >= 0:  # Don't calculate centroid for unclustered (noise) instances
-                        sense_embeddings = [self.embeddings[x][y] for x, y in sense_members]
-                        sense_centroids.append(np.mean(sense_embeddings, 0))
+                    sense_embeddings = [self.embeddings[x][y] for x, y in sense_members]
+                    sense_centroids.append(np.mean(sense_embeddings, 0))
                 else:
                     fo.write(" is empty\n\n")
 
@@ -268,15 +283,14 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda:2', help='GPU Device to Use?')
     parser.add_argument('--corpus', type=str, required=True, help='Training Corpus')
     parser.add_argument('--threshold', type=int, default=2, help='Min freq of word to be disambiguated')
-    parser.add_argument('--func_frac', type=float, default=0.05, help='Top fraction of words considered functional')
     parser.add_argument('--start_k', type=int, default=10, help='First number of clusters to use in KMeans')
     parser.add_argument('--end_k', type=int, default=10, help='Final number of clusters to use in KMeans')
     parser.add_argument('--step_k', type=int, default=1, help='Increase in number of clusters to use')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
+    parser.add_argument('--mode', type=str, default='eval_only', help='Determines if all words need to be clustered')
     parser.add_argument('--clustering', type=str, default='OPTICS', help='Clustering method to use')
-    parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
-    parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
+    parser.add_argument('--pickle_file', type=str, default='test.pickle', help='Pickle file of Bert Embeddings/Save '
                                                                                'Embeddings to file')
 
     args = parser.parse_args()
@@ -289,16 +303,20 @@ if __name__ == '__main__':
     else:
         print("Processing without CUDA!")
 
+    if args.mode == "eval_only":
+        print("Processing only ambiguous words in training corpus...")
+    else:
+        print("Processing all words below threshold")
+
     print("Loading WSD Model!")
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_embeddings(args.pickle_emb, args.corpus, args.func_frac)
+    WSD.load_embeddings(args.pickle_file, args.corpus, args.mode)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(args.save_to, clust_method=args.clustering, freq_threshold=args.threshold, k=nn,
-                         pickle_cent=args.pickle_cent)
+        WSD.disambiguate(args.save_to, clust_method=args.clustering, freq_threshold=args.threshold, k=nn)
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")

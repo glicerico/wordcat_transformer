@@ -22,12 +22,21 @@ def compute_fscore(true, pred):
     true_pairs = get_pairs(true)
     pred_pairs = get_pairs(pred)
     int_size = len(set(true_pairs).intersection(pred_pairs))
-    p = int_size / float(len(pred_pairs))
-    r = int_size / float(len(true_pairs))
-    return 2 * p * r / float(p + r)
+    # Handle special cases
+    eps = 0.00001
+    len_true = len(true_pairs) + eps  # Add epsilon to avoid division by 0
+    len_pred = len(pred_pairs) + eps
+    if len_true + len_pred == 0:  # Neither true nor pred have any pairs
+        return 1
+    elif int_size == 0:  # No match between pairs
+        return 0
+    else:
+        p = int_size / float(len(pred_pairs))
+        r = int_size / float(len(true_pairs))
+        return 2 * p * r / float(p + r)  # Added epsilon to avoid division by 0
 
 
-def read_answers(filename):
+def read_answers(filename, all_in_one=False):
     with open(filename, 'r') as f:
         keys = []
         instances = []
@@ -36,6 +45,8 @@ def read_answers(filename):
         sense_count = 0
         for line in f.readlines():
             key, instance, sense = line.strip().split(' ')
+            if all_in_one:  # Baseline where all words have same sense
+                sense = 0
             num = int(instance.split('.')[-1])
             keys.append(key)
             instances.append(num)
@@ -57,9 +68,13 @@ def compute_metrics(answers, predictions):
     vscores = []
     fscores = []
     weights = []
-    for k in answers.keys():
-        idx = np.argsort(np.array(answers[k][0]))
-        true = np.array(answers[k][1])[idx]
+    for k, v in answers.items():
+        if len(v[0]) == 1:
+            print(f"Skipping one-instance word {k}")
+            continue
+        print(f"Evaluating word {k}")
+        idx = np.argsort(np.array(v[0]))
+        true = np.array(v[1])[idx]
         pred = np.array(predictions[k][1])
         weights.append(pred.shape[0])
         if len(np.unique(true)) > 1:
@@ -83,7 +98,18 @@ def compute_metrics(answers, predictions):
 if __name__ == '__main__':
     GS_file = sys.argv[1]
     pred_file = sys.argv[2]
+    baseline = ''
+    if len(sys.argv) == 4:
+        baseline = sys.argv[3]
 
+    print("Loading gold standard...")
     true_answers = read_answers(GS_file)
-    predictions = read_answers(pred_file)
+    print("Loading prediction...")
+    if baseline == 'all_in_one':
+        print("entered")
+        predictions = read_answers(pred_file, all_in_one=True)
+    else:
+        predictions = read_answers(pred_file)
+
+    print("Evaluating...")
     compute_metrics(true_answers, predictions)

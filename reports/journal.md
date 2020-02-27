@@ -15,7 +15,7 @@ Thus, Ben proposes to use external statistical methods to "milk" BERT the syntac
 relationships that we are looking for.
 
 Based on the code by Wiedemann et al. (2019, github.com/uhh-lt/bert-sense), I 
-first updated [Bert_Model.py](src/Bert_Model.py) to use the latest huggingface transformers models 
+first updated [Bert_Model.py](../src/BERT_Model.py) to use the latest huggingface transformers models 
 (github.com/huggingface/transformers) and to be able to run without CUDA 
 (fixed a bug).
 The obtained results were not exactly the same as their paper, but quite close.
@@ -26,7 +26,7 @@ in the corpus, then cluster them and hope that word categories will appear
 as a result.
 This idea is coming from the previous use of word2vec and AdaGram vectors
 for word categorization. 
-The code for this attempt is at [all_word_senses.py](src/all_word_senses.py).
+The code for this attempt is at [all_word_senses.py](../src/all_word_senses.py).
 Some of the design decisions made were:
 - Use the concatenation of the last 4 attention layers for embeddings, 
 like bert-sense and the original BERT paper (Devlin et al 2018).
@@ -62,7 +62,7 @@ in sentence probabilities between each word and other words.
 4) Cluster the vectors to form word categories. Use a Clark-like clustering
 method, where not all word-senses will be categorized.
 
-Current work is to implement step 1) above in [word_senser.py](src/word-senser.py), 
+Current work is to implement step 1) above in [word_senser.py](../src/word_senser.py), 
 using the following steps:
 - First pass
    3) Store sentences in corpus in order 
@@ -80,7 +80,7 @@ using the following steps:
 There's a working implementation of WSD in word_senser.py
 
 After experimenting with 
-[senseval2_lexical_sample_train](../UFSAC/corpus/ufsac-public-2.1/senseval2_lexical_sample_test.xml), 
+[senseval2_lexical_sample_train](../../UFSAC/corpus/ufsac-public-2.1/senseval2_lexical_sample_test.xml), 
 I notice that memory consumption is quite large using
 the concatenation of the last 4 hidden states.
 In order to keep testing in my laptop, I change to using ~~only the 4th to last
@@ -140,7 +140,7 @@ not considered ambiguous in other sentences.
  
  **************
  
- Modified AdaGram's [test-all.py](src/test-all.py) to evaluate the
+ Modified AdaGram's [test-all.py](../src/test-all.py) to evaluate the
  disambiguation results.
  TODO: Fix problem causing division by zero, and evaluate results in nova.
  
@@ -165,7 +165,7 @@ not considered ambiguous in other sentences.
  have a high probability of occurring in predictions for different clusters.
  
  First try with just a few sentences, clustered with KMeans, in 
- [wordcat_bert.ipynb](notebooks/wordcat_bert.ipynb).
+ [wordcat_bert.ipynb](../notebooks/wordcat_bert.ipynb).
  Masked words are only adjectives, personal nouns, location nouns.
  Obtained word categories look quite decent, and of course the granularity
  depends on the number of clusters used:
@@ -257,7 +257,7 @@ In this example, 6 clusters seems like the best result with the above sentences.
  
  ********
  Also tried masking every word in the above sentences and clustering that way.
- Results can be found in [wordcat_funcs.ipynb](notebooks/wordcat_funcs.ipynb).
+ Results can be found in [wordcat_funcs.ipynb](../notebooks/wordcat_funcs.ipynb).
  The categories are not as crisp and in the former, simpler case... they
  contain some noisy results.
  
@@ -287,10 +287,10 @@ above (a factor of around `V*avg_l` more evaluations, where V is the size of the
 vocabulary, and `avg_l` is the average sentence length).
 However, it seems intuitive that his approach should work better.
 This approach would require a separate sense disambiguation, though... perhaps
-the one implemented in [word_senser.py](src/word_senser.py).
+the one implemented in [word_senser.py](../src/word_senser.py).
 
 ********
-While reviewing code in [Bert_as_LM.ipynb](notebooks/Bert_as_LM.ipynb), I
+While reviewing code in [Bert_as_LM.ipynb](../notebooks/Bert_as_LM.ipynb), I
 notice that the normalized sentence probability is taking the sentence length
 as the number of sub-words.
 For most words, the sub-words have normally quite high probability, so this
@@ -342,11 +342,11 @@ Normalized sentence prob: log(P(sentence)) / sent_length: -0.9733260146209172
 TODO: Handle subwords differently
 
 **************
-File [word_categorizer.py](src/word_categorizer.py) contains the current
+File [word_categorizer.py](../src/word_categorizer.py) contains the current
 attempt with Ben's approach discussed above.
 
 Some notes:
-- Start with simple English vocab (some files in [vocabularies](vocabularies))
+- Start with simple English vocab (some files in [vocabularies](../vocabularies))
 - Start with small number of sentences.
 - Probably should use sparse vectors and assign very low sentence probs
  (below some threshold) as zeros: ~~TODO~~ Done, but doesn't seem to make
@@ -362,8 +362,8 @@ Some notes:
  Need an evaluation measure for the word categories.
  Following a [list of words by POS](https://www.english-grammar-revolution.com/word-lists.html),
  I create a gold standard to evaluate the obtained categories.
- Labeled words per category are in [POS](vocabularies/POS) directory.
- The file [POS_unambiguous.vocab](vocabularies/POS_unambiguous.vocab)
+ Labeled words per category are in [POS](../vocabularies/POS) directory.
+ The file [POS_unambiguous.vocab](../vocabularies/POS_unambiguous.vocab)
  contains these words, eliminating all words appearing in more than one
  category, to avoid dealing with ambiguity for now.
  
@@ -500,7 +500,7 @@ and I would get the probability of `P([MASK]=answered)` from applying
 softmax to the output of the last layer in BERT.
 
 This approach, which grows the sentence gradually, was attempted in
-[a notebook](notebooks/Bert_as_LM_unidirectional-fail.ipynb), but seems
+[a notebook](../notebooks/Bert_as_LM_unidirectional-fail.ipynb), but seems
 failed to me.
 Since the sentences fed into BERT are sub-parts of the original one
 and would be quite different it, the probabilities are really off.
@@ -516,7 +516,7 @@ I would feed the sentence
 and again I take the probability of `P([MASK]=answered)` from applying
 softmax to the output of the last layer in BERT.
 This is the approach taken in 
-[this notebook](notebooks/Bert_as_LM_unidirectional.ipynb), which
+[this notebook](../notebooks/Bert_as_LM_unidirectional.ipynb), which
 seems to make a lot more sense probabilistically.
 
 *******
@@ -524,7 +524,7 @@ seems to make a lot more sense probabilistically.
 Also, the probability of a sentence as calculated above would grow with the 
 sentence length. 
 Hence, I decide to use some normalization.
-Previously, as in [this notebook](notebooks/Bert_as_LM.ipynb) I was actually
+Previously, as in [this notebook](../notebooks/Bert_as_LM.ipynb) I was actually
 calculating the logarithm of the sentence probability, divided by the length
 of the sentence, i.e. `log(P(S))/len(S)`.
 This is equivalent to the logarithm of the geometric average of the
@@ -534,13 +534,150 @@ the geometric average of the components of the probability estimation:
 ```
 P_forward(he ran .) = (P(he) * P(he ran| he) * P(he ran .|he ran)) ^ (1/3)
 ```
-[This notebook](notebooks/Bert_as_LM_unidirectional.ipynb) contains calculations
+[This notebook](../notebooks/Bert_as_LM_unidirectional.ipynb) contains calculations
 performed this way.
 It doesn't make as much sense as the previous attempt, because sentences like
 `The steak was eaten by the man`, and `The steak ate the man` are not too dissimilar.
 However, I will try plugging it to the word category formation code, to check if the
 results make better sense than before.
 
-*****
+***************
 ## Feb 17, 2020
+Implemented changes to make unidirectional sentence probability calculation.
+Ran OPTICS experiment; results are as good as previous runs.
+Also got distracted by meeting + debugging colleague's code 
+for networks project.
 
+***************
+## Feb 18, 2020
+
+Implemented sub-word handling while replacing words in a given sentence,
+to fill the word-sentence matrix used for word category formation.
+This is necessary, regardless of the sentence probability estimation.
+Ran experiment.
+
+Also, went back to WSD, as this is the next step to add into the pipeline.
+
+********
+## Feb 21, 2020
+In the past days, I reviewed the code and checked performance of WSD, which
+is the stage I had stopped at last time I worked on it.
+Performance is evaluated against the gold standards in the senseval/semeval
+files. The problem with those is that:
+1) They are quite granular in the senses they provide.
+2) There are too few examples to work with
+
+Hence, sklearn clustering algorithms DBSCAN and OPTICS are struggling to 
+disambiguate. K-means does a decent job by eye, but bad against senseval
+for the above-mentioned reasons.
+
+I started connecting the WSD code output with the word_categorizer, as
+the latter needs input from the former. 
+I think I'll store the word-sense centroids in a pickle file, which
+can later be read by the word categorizer.
+
+Later: Implemented export of cluster centroids.
+
+****************
+## Feb 22, 2020
+Implemented word senser from plain text file, instead of xml file with
+word-sense disambiguation.
+This is needed for the real case where we're processing plain, unlabeled
+text.
+
+Placed XML senser in [word_senser_XML.py](../src/word_senser_XML.py)
+
+************
+## Feb 23, 2020
+Created a small [WSD corpus](../sentences/smallWSD_corpus.txt) and made ran experiments with the latest
+word_senser.py and different clusterings.
+OPTICS is not working at all in these cases, not sure why. It gives either
+0 or 1 clusters, even varying the max_eps distance parameter.
+KMeans clustering does a decent job disambiguating words in the new corpus.
+
+Next: Modify word_categorizer to take disambiguated sense and generate a
+different embedding per sense.
+
+~~TODO: Make sure only disambiguated words are exported in centroids~~
+
+**************
+## Feb 24, 2020
+
+Word senser only exports embeddings for ambiguous words now.
+
+Implemented the use of WSD in the word categorizer.
+Running experiments overnight.
+
+**********
+## Feb 25, 2020
+
+Experiment with OPTICS gives good clusters, but several words are left 
+unclustered.
+~~Trying with KMeans gives out of memory error.~~ FIXED.
+
+A word on metrics: SKlearn KMeans implementation cannot use "cosine" distance.
+I'm using cosine distance in OPTICS.
+
+Checking ways to reduce memory use after the matrix has been built:
+- release both BERT models: ~~TODO.~~ DONE
+- don't use sparse matrix. I think if there are no zero entries (we aren't
+using zero entries now) this consumes more memory? Maybe wait to change this.
+~~TODO.~~ DONE
+- once matrix is built, no need to hold centroids in memory. ~~TODO.~~ DONE
+
+Seems like memory problem comes from faulty matrix storage, not from
+above modules.
+However, good idea to not even load BERT modules and centroids when loading
+matrix from pickle: less time and memory consumption, for later larger runs.
+FIXED
+
+Word category formation runs take a very long time.
+SmallWSD run (16 sentences) takes about 12 hours in my laptop.
+19sentences.txt takes about 24 hours in nova.
+
+Finding ways to improve processing time.
+And results are still not properly tuned... so going through pipeline
+slowly with debugger, to make sure everything does what I expect, and
+check for speed improvements
+
+Looking at the embeddings for word_senser, Ben is right that they do not
+necessarily work for WSD. They seem different, even for almost identical
+uses of the word, even in same sentence.
+It's curious that KMeans still can disambiguate them decently.
+
+************
+## Feb 26, 2020
+Wrote [report](report_feb26.md) about current status:
+```
+I added handling of sub-words, modified the way sentence probabilities
+are calculated, and integrated disambiguation into the pipeline.
+After these changes, the clusters obtained are still good, but several
+words are still uncategorized.
+```
+
+***********
+## Feb 27, 2020
+Made some tests on current processing time.
+I had the impression that past runs were not scaling properly.
+After a few timing experiments, I noticed I was misestimating.
+Actually, scaling is as expected: smallWSD corpus with 15 sentences and
+10 masks should last around 9 hours, as observed (more or less).
+
+Potential efficiency improvements:
+Calculate sentence probabilities for a sentence more cleverly:
+many of the BERT evaluations are repeated in the same sentence.
+I.e. when evaluating the forward and backward probability, many of the
+passes do not involve the current word being evaluated, so they can be 
+reused.
+E.g. when evaluating `This is a ______ sentence .`, for each vocabulary
+word I currently evaluate `P(w_0 = This| MASK MASK MASK MASK MASK MASK)`.
+This (and many others) could immediately be reused by any of the vocabulary
+word evaluations.
+I think I could cut evaluation at least by half with this.
+
+TODO: Find a clever way to calculate sentence probabilities for all the
+vocabulary.
+
+Also, other sentences could benefit from some of these evaluations if they
+were saved.
+Ben suggested using [tries]()
