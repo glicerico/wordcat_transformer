@@ -9,7 +9,8 @@ import random as rand
 from sklearn.cluster import KMeans, DBSCAN, OPTICS
 from sklearn.metrics.pairwise import cosine_distances
 from tqdm import tqdm
-#from scipy import sparse
+
+# from scipy import sparse
 
 # My modules
 sys.path.insert(0, os.path.abspath('../src'))
@@ -77,7 +78,7 @@ class WordCategorizer:
         self.disamb_vocab = [[k] * len(v) for k, v in self.senses.items()]  # Build list of lists
         self.disamb_vocab = list(itertools.chain.from_iterable(self.disamb_vocab))  # Flatten
 
-    def load_matrix(self, sentences_filename, pickle_emb, num_masks=1, verbose=False):  #, sparse_thres=-8):
+    def load_matrix(self, sentences_filename, pickle_emb, num_masks=1, verbose=False):  # , sparse_thres=-8):
         """
         If pickle file is present, load data; else, calculate it.
         :param sentences_filename:  File with sentence to use as features for word categorization
@@ -107,7 +108,8 @@ class WordCategorizer:
             print("Loading BERT model...")
             self.Bert_WSD = WordSenseModel(self.pretrained_model, self.device_number, self.use_cuda)
 
-            self.populate_matrix(sentences_filename, num_repl=num_masks, verbose=verbose)#, sparse_thres=sparse_thres)
+            self.populate_matrix(sentences_filename, num_repl=num_masks,
+                                 verbose=verbose)  # , sparse_thres=sparse_thres)
 
             with open(pickle_emb, 'wb') as h:
                 _data = (self.disamb_vocab, self.gold, self.matrix)
@@ -115,7 +117,7 @@ class WordCategorizer:
 
             print("Data stored in " + pickle_emb)
 
-    def populate_matrix(self, sents_filename, num_repl=1, verbose=False):  #, sparse_thres=-4):
+    def populate_matrix(self, sents_filename, num_repl=1, verbose=False):  # , sparse_thres=-4):
         """
         Calculates probability matrix for the sentence-word pairs
         :param sents_filename:  File with input sentences
@@ -178,7 +180,7 @@ class WordCategorizer:
         sense_id = 0
         if num_senses > 1:  # If word is ambiguous
             sense_id = self.get_closest_sense(sense_centroids, replaced_sent, word_init[repl_pos],
-                                              word_init[repl_pos+ 1])
+                                              word_init[repl_pos + 1])
         prob_list[sense_id] = curr_prob  # Only instance with closest meaning contributes to vector
 
         return prob_list
@@ -297,7 +299,7 @@ if __name__ == '__main__':
     parser.add_argument('--pickle_WSD', type=str, required=False, help='Pickle file w/sense centroids')
     parser.add_argument('--pickle_vocab', type=str, required=False, help='Pickle file w/vocabulary')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file with embeddings/Save '
-                                                                               'embeddings to file')
+                                                                              'embeddings to file')
     args = parser.parse_args()
 
     wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
@@ -320,8 +322,8 @@ if __name__ == '__main__':
 
     # Heavy part of the process: calculate sentence probabilities for each vocab word
     for _ in tqdm(range(1)):  # Time the process
-        wc.load_matrix(args.sentences, args.pickle_emb, num_masks=args.masks, verbose=args.verbose)  #,
-                       # sparse_thres=args.sparse_thres)
+        wc.load_matrix(args.sentences, args.pickle_emb, num_masks=args.masks, verbose=args.verbose)  # ,
+        # sparse_thres=args.sparse_thres)
     del wc.Bert_WSD, wc.Bert_Model, wc.senses  # Release memory
 
     print("Start clustering...")
@@ -335,4 +337,3 @@ if __name__ == '__main__':
             # print(f"\nEvaluation for k={curr_k}")
             # fl.write(f"Evaluation for k={curr_k}\n")
             # wc.eval_clusters(fl, cluster_labels)
-
