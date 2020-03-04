@@ -79,6 +79,20 @@ class BertLM(BERT):
 
         return probs  # Model predictions
 
+    def get_sentence_prob_normalized(self, tokenized_input, norm_dict, verbose=False):
+        """
+        Return length-normalized sentence probability. Divides by value in norm_dict
+        :param tokenized_input: Input sentence
+        :param norm_dict:       Contains normalization values for each sentence length
+        :param verbose:
+        :return:
+        """
+        sent_len = len(tokenized_input) - 2  # Num of tokens in sentence (discount boundary tokens)
+        print(tokenized_input)
+        print(sent_len)
+        score = self.get_sentence_prob_directional(tokenized_input, verbose=verbose)
+        return score / norm_dict[sent_len]
+
     def get_sentence_prob_directional(self, tokenized_input, verbose=False):
         """
         Estimate the probability of sentence S: P(S).
@@ -86,6 +100,53 @@ class BertLM(BERT):
         P_f(S) = P(w_0, w_1, ..., w_N) = P(w_0) * P(w_1|w_0) * P(w_2|w_0, w_1) * ...
         where N is the number of words in the sentence, and each P(w_i|...) is given by a transformer masked
         word prediction with all words to its left masked.
+        To take advantage of BERT's bi-directional capabilities, we also estimate the backwards probability:
+        P_b(S) = P(w_0, w_1, ..., w_N) = P(w_N) * P(w_{N-1}|w_N) * P(w_{N-2}|w_{N-1}, w_N) * ...
+        The sentence probability is the geometric-average of the two directional ones:
+        P(S) = sqrt(P_f(S) * P_b(S))
+        Hence, one sentence probability requires 2N masked word prediction evaluations.
+        :param tokenized_input: Input sentence
+        :param verbose: Print information about the obtained probabilities or not.
+        :return: Log of geometric average of each prediction: sort of sentence prob. normalized by sentence length.
+        """
+        sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
+
+        # Pre-process sentence, adding special tokens
+        ids_input = self.tokenizer.convert_tokens_to_ids(tokenized_input)
+        if verbose:
+            print(f"Processing sentence: {tokenized_input}")
+
+        log_sent_prob_forward = 0
+        log_sent_prob_backwards = 0
+        # Mask non-special tokens in forward and backwards directions; calculate their probabilities
+        for i in range(1, len(tokenized_input) - 1):  # Don't loop first and last tokens
+            probs_forward = self.get_directional_prob(sm, tokenized_input, i, 'forward', verbose=verbose)
+            probs_backwards = self.get_directional_prob(sm, tokenized_input, i, 'backwards', verbose=verbose)
+            log_prob_forward = probs_forward[ids_input[i]]  # Prediction for masked word
+            log_prob_forward = np.log10(log_prob_forward.detach().numpy())
+            log_prob_backwards = probs_backwards[ids_input[i]]  # Prediction for masked word
+            log_prob_backwards = np.log10(log_prob_backwards.detach().numpy())
+            log_sent_prob_forward += log_prob_forward
+            log_sent_prob_backwards += log_prob_backwards
+
+            if verbose:
+                print(f"Word: {tokenized_input[i]} \t Log-Prob_forward: {log_prob_forward}; Log-Prob_backwards: {log_prob_backwards}")
+
+        # Obtain geometric average of forward and backward probs
+        log_geom_mean_sent_prob = 0.5 * (log_sent_prob_forward + log_sent_prob_backwards)
+        if verbose:
+            print(f"Raw forward sentence probability: {log_sent_prob_forward}")
+            print(f"Raw backward sentence probability: {log_sent_prob_backwards}\n")
+            print(f"Average normalized sentence prob: {log_geom_mean_sent_prob}\n")
+        return log_geom_mean_sent_prob
+
+    def get_sentence_prob_avg_directional(self, tokenized_input, verbose=False):
+        """
+        Estimate the probability of sentence S: P(S).
+        A forward one-directional sentence probability is defined as:
+        P_f(S) = [P(w_0, w_1, ..., w_N) = P(w_0) * P(w_1|w_0) * P(w_2|w_0, w_1) * ...] ^ (1/N)
+        where N is the number of words in the sentence, and each P(w_i|...) is given by a transformer masked
+        word prediction with all words to its left masked. Thus, it's the geometric mean of the individual terms.
         To take advantage of BERT's bi-directional capabilities, we also estimate the backwards probability:
         P_b(S) = P(w_0, w_1, ..., w_N) = P(w_N) * P(w_{N-1}|w_N) * P(w_{N-2}|w_{N-1}, w_N) * ...
         The sentence probability is the geometric-average of the two directional ones:
@@ -125,7 +186,7 @@ class BertLM(BERT):
             print(f"Average normalized sentence prob: {geom_mean_sent_prob}\n")
         return geom_mean_sent_prob
 
-    def get_sentence_prob(self, tokenized_input, verbose=False):
+    def get_sentence_prob_bidirectional(self, tokenized_input, verbose=False):
 
         """
         Estimate the sentence probability P(S), where S is a sentence.
