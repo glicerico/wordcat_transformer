@@ -40,6 +40,8 @@ class BertLM(BERT):
         if use_cuda:
             self.model.to(device_number)
 
+        self.norm_dict = {}
+
     def print_top_predictions(self, probs, k=5):
         """
         Prints the top-k predicted words contained in probs, and their probabilities.
@@ -79,7 +81,27 @@ class BertLM(BERT):
 
         return probs  # Model predictions
 
-    def get_sentence_prob_normalized(self, tokenized_input, norm_dict, verbose=False):
+    def calculate_norm_dict(self, sentences_file):
+        """
+        Determines the normalization score for each sentence length. Sentences_file should
+        include grammatical samples of sentences of different length.
+        :param sentences_file:  File with sentences to use for normalization scores
+        :return:                Dictionary with normalization scores for each sent length
+        """
+        counts_probs = {}  # Stores counts and sum of probs for sentences of given length
+        with open(sentences_file, 'r') as fs:
+            for sent in fs:
+                tok_sent = self.tokenize_sent(sent)
+                tok_len = len(tok_sent)
+                if tok_len not in counts_probs:
+                    counts_probs[tok_len] = (0, 0)
+                counts_probs[tok_len][0] += 1
+                counts_probs[tok_len][1] += self.get_sentence_prob_directional(tok_sent)
+
+        print(f"Calculated normalization values for lengths: {counts_probs.keys()}")
+        self.norm_dict = {k: v[1] / v[0] for k, v in counts_probs.items()}
+
+    def get_sentence_prob_normalized(self, tokenized_input,  verbose=False):
         """
         Return length-normalized sentence probability. Divides by value in norm_dict
         :param tokenized_input: Input sentence
@@ -87,11 +109,14 @@ class BertLM(BERT):
         :param verbose:
         :return:
         """
-        sent_len = len(tokenized_input) - 2  # Num of tokens in sentence (discount boundary tokens)
+        sent_len = len(tokenized_input)  # Num of tokens in sentence (incl boundary tokens)
         print(tokenized_input)
         print(sent_len)
         score = self.get_sentence_prob_directional(tokenized_input, verbose=verbose)
-        return score / norm_dict[sent_len]
+        if sent_len not in self.norm_dict:
+            print("No normalization for given sentence length!!")
+        norm_score = self.norm_dict.get(sent_len, 1)
+        return score / norm_score
 
     def get_sentence_prob_directional(self, tokenized_input, verbose=False):
         """
@@ -138,7 +163,7 @@ class BertLM(BERT):
             print(f"Raw forward sentence probability: {log_sent_prob_forward}")
             print(f"Raw backward sentence probability: {log_sent_prob_backwards}\n")
             print(f"Average normalized sentence prob: {log_geom_mean_sent_prob}\n")
-        return log_geom_mean_sent_prob
+        return np.power(log_geom_mean_sent_prob, 10)
 
     def get_sentence_prob_avg_directional(self, tokenized_input, verbose=False):
         """
