@@ -70,7 +70,11 @@ class BertLM(BERT):
             print()
             print(current_tokens)
 
-        masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokens)])
+        if self.use_cuda:
+            masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokens)]).to(self.device_number)
+        else:
+            masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokens)])
+            
         predictions = self.model(masked_input)
         predictions = predictions[0]
         probs = sm(predictions[0, i])  # Softmax to get probabilities
@@ -111,8 +115,8 @@ class BertLM(BERT):
             probs_backwards = self.get_directional_prob(sm, tokenized_input, i, 'backwards', verbose=verbose)
             prob_forward = probs_forward[ids_input[i]]  # Prediction for masked word
             prob_backwards = probs_backwards[ids_input[i]]  # Prediction for masked word
-            sent_prob_forward *= np.power(prob_forward.detach().numpy(), 1 / sent_len)
-            sent_prob_backwards *= np.power(prob_backwards.detach().numpy(), 1 / sent_len)
+            sent_prob_forward *= np.power(prob_forward.detach().cpu().numpy(), 1 / sent_len)
+            sent_prob_backwards *= np.power(prob_backwards.detach().cpu().numpy(), 1 / sent_len)
 
             if verbose:
                 print(f"Word: {tokenized_input[i]} \t Prob_forward: {prob_forward}; Prob_backwards: {prob_backwards}")
@@ -151,7 +155,10 @@ class BertLM(BERT):
         for i in range(1, len(tokenized_input) - 1):  # Ignore first and last tokens
             current_tokenized = tokenized_input[:]
             current_tokenized[i] = MASK_TOKEN
-            masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokenized)])
+            if self.use_cuda:
+                masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokenized)]).to(self.device_number)
+            else:
+                masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokenized)])
             predictions = self.model(masked_input)[0]
             current_probs = sm(predictions[0, i])  # Softmax to get probabilities
             current_prob = current_probs[ids_input[i]]  # Prediction for masked word
