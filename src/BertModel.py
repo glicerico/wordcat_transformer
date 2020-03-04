@@ -33,7 +33,7 @@ class BERT:
 class BertLM(BERT):
     def __init__(self, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
         BERT.__init__(self, pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
-        self.model = BertForMaskedLM.from_pretrained(pretrained_model)
+        self.model = BertForMaskedLM.from_pretrained(pretrained_model)  # Overwrite model
         with torch.no_grad():
             self.model.eval()
 
