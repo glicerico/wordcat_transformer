@@ -96,10 +96,13 @@ class BertLM(BERT):
                 if tok_len not in counts_probs:
                     counts_probs[tok_len] = [0, 0]
                 counts_probs[tok_len][0] += 1
-                counts_probs[tok_len][1] += self.get_sentence_prob_directional(tok_sent)
+                # counts_probs[tok_len][1] += self.get_sentence_prob_directional(tok_sent)
+                # TRY WITH geometric average instead
+                counts_probs[tok_len][1] += np.log(self.get_sentence_prob_directional(tok_sent))
 
         print(f"Calculated normalization values for lengths: {counts_probs.keys()}")
-        self.norm_dict = {k: v[1] / v[0] for k, v in counts_probs.items()}
+        # self.norm_dict = {k: v[1] / v[0] for k, v in counts_probs.items()}
+        self.norm_dict = {k: np.power(np.e, v[1] / v[0]) for k, v in counts_probs.items()}
 
     def get_sentence_prob_normalized(self, tokenized_input,  verbose=False):
         """

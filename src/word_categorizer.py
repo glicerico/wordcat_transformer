@@ -171,7 +171,7 @@ class WordCategorizer:
         # Following substitution handles removing sub-words, as well as inserting them
         word_tokens = self.Bert_Model.tokenizer.tokenize(word)
         replaced_sent = tokenized_sent[:word_init[repl_pos]] + word_tokens + tokenized_sent[word_init[repl_pos + 1]:]
-        curr_prob = self.Bert_Model.get_sentence_prob_normalized(replaced_sent, norm_dict, verbose=verbose)
+        curr_prob = self.Bert_Model.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
 
         # Determine which word-sense vector gets the calculated prob
         sense_centroids = self.senses.get(word, [0])  # If word not in ambiguous dict, return 1-item list
