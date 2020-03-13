@@ -31,7 +31,7 @@ class BERT:
 
 
 class BertLM(BERT):
-    def __init__(self, pretrained_model='bert-base-uncased', device_number='cuda:2', use_cuda=False):
+    def __init__(self, pretrained_model='bert-large-uncased', device_number='cuda:2', use_cuda=False):
         BERT.__init__(self, pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
         self.model = BertForMaskedLM.from_pretrained(pretrained_model)  # Overwrite model
         with torch.no_grad():
@@ -98,11 +98,11 @@ class BertLM(BERT):
                 counts_probs[tok_len][0] += 1
                 # counts_probs[tok_len][1] += self.get_sentence_prob_directional(tok_sent)
                 # TRY WITH geometric average instead
-                counts_probs[tok_len][1] += np.log(self.get_sentence_prob_directional(tok_sent))
+                counts_probs[tok_len][1] += np.log10(self.get_sentence_prob_directional(tok_sent))
 
         print(f"Calculated normalization values for lengths: {counts_probs.keys()}")
         # self.norm_dict = {k: v[1] / v[0] for k, v in counts_probs.items()}
-        self.norm_dict = {k: np.power(np.e, v[1] / v[0]) for k, v in counts_probs.items()}
+        self.norm_dict = {k: np.power(10, v[1] / v[0]) for k, v in counts_probs.items()}
 
     def get_sentence_prob_normalized(self, tokenized_input,  verbose=False):
         """
@@ -115,7 +115,8 @@ class BertLM(BERT):
         score = self.get_sentence_prob_directional(tokenized_input, verbose=verbose)
         if sent_len not in self.norm_dict:
             print("WARNING: No normalization for given sentence length!!\n")
-        norm_score = self.norm_dict.get(sent_len, 1)
+        norm_score = self.norm_dict.get(sent_len, min(self.norm_dict.values()))
+        # norm_score = self.norm_dict.get(sent_len, 1)
         return score / norm_score
 
     def get_sentence_prob_directional(self, tokenized_input, verbose=False):
