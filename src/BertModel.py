@@ -125,9 +125,10 @@ class BertLM(BERT):
             print(f"Average normalized sentence prob: {geom_mean_sent_prob}\n")
         return geom_mean_sent_prob
 
-    def get_sentence_prob(self, tokenized_input, verbose=False):
-
+    def get_sentence_prob_bidirectional(self, tokenized_input, verbose=False):
         """
+        THIS METHOD HAS AN IMPORTANT PROBLEM WITH SUB-WORDS AND MULTI-WORD PHRASES (e.g. 'quid pro quo') BECAUSE
+        MASKING ONE TOKEN AT A TIME MAKE THEM GET ARTIFICIALLY HIGH PROBS.
         Estimate the sentence probability P(S), where S is a sentence.
         This probability is composed by using the given transformer model's predictions, as follows:
         P(S) = Prod_i(P(w_i|w_0, w_1,..,w_i-1,w_i+1,..,w_N)),
