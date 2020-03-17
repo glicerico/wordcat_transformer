@@ -24,7 +24,7 @@ class WordSenseModel:
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
-        self.embeddings = []  # Embeddings for all words in corpus
+        self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
 
         self.device_number = device_number
         self.use_cuda = use_cuda
@@ -55,27 +55,28 @@ class WordSenseModel:
 
         return _final_layer
 
-    def load_embeddings(self, pickle_filename, corpus_file, func_frac):
+    def load_matrix(self, pickle_filename, corpus_file, func_frac):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
           a) Stores sentences as an array.
           b) Creates dictionary where each vocabulary word is mapped to its occurrences in corpus.
-          c) Calculates embeddings for each vocabulary word.
+          c) Calculates instance-word matrix, for instances and vocab words in corpus.
         :param pickle_filename
         :param corpus_file
+        :param func_frac:       Fraction of words that are considered functional words (ignored for disamb)
         """
         try:
             with open(pickle_filename, 'rb') as h:
                 _data = pickle.load(h)
                 self.sentences = _data[0]
                 self.vocab_map = _data[1]
-                self.embeddings = _data[2]
+                self.matrix = _data[2]
 
-                print("EMBEDDINGS FOUND!")
+                print("MATRIX FOUND!")
 
         except:
-            print("Embedding File Not Found!! \n")
+            print("MATRIX File Not Found!! \n")
 
             print("Loading vocabulary")
             self.get_vocabulary(corpus_file)
@@ -84,11 +85,11 @@ class WordSenseModel:
 
             print(f"Removing the top {func_frac} fraction of words")
             self.remove_function_words(func_frac)
-            print("Calculate embeddings...")
-            self.calculate_embeddings()
+            print("Calculate matrix...")
+            self.calculate_matrix()
 
             with open(pickle_filename, 'wb') as h:
-                _data = (self.sentences, self.vocab_map, self.embeddings)
+                _data = (self.sentences, self.vocab_map, self.matrix)
                 pickle.dump(_data, h)
 
             print("Data stored in " + pickle_filename)
@@ -129,17 +130,14 @@ class WordSenseModel:
                         self.vocab_map[word] = []
                     self.vocab_map[word].append((sent_nbr, word_pos))  # Register instance location
 
-    def calculate_embeddings(self):
+    def calculate_matrix(self):
         """
         Calculates embeddings for all word instances in corpus_file
         """
-        stored_embeddings = 0
-
         # Process each sentence in corpus
         for bert_tokens in self.sentences:
-            sent_embeddings = []  # Store one sentence's word embeddings as elements
+            sent_row = []  # Store sentence's probabilities with different fillers.
             words = self.get_words(bert_tokens)
-            final_layer = self.get_bert_embeddings(bert_tokens)
 
             token_count = 1  # Start from 1: ignore '[CLS]' embedding
             # Process all words in sentence
@@ -149,16 +147,13 @@ class WordSenseModel:
                 if word in self.vocab_map.keys():  # Store embeddings for vocab words
                     embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
                     sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
-                    stored_embeddings += 1
                 else:  # If word not in vocab of interest, just use placeholder
                     sent_embeddings.append(0)
 
                 token_count += word_len
 
             # Store this sentence embeddings in the general list
-            self.embeddings.append(sent_embeddings)
-
-        print(f"{stored_embeddings} EMBEDDINGS STORED")
+            self.matrix.append(sent_embeddings)
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """
@@ -199,7 +194,7 @@ class WordSenseModel:
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
-            curr_embeddings = [self.embeddings[x][y] for x, y in instances]
+            curr_embeddings = [self.matrix[x][y] for x, y in instances]
 
             if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
                 print(f"Word \"{word}\" frequency lower than threshold")
@@ -252,7 +247,7 @@ class WordSenseModel:
 
                     # Calculate cluster centroid and save
                     if i >= 0:  # Don't calculate centroid for unclustered (noise) instances
-                        sense_embeddings = [self.embeddings[x][y] for x, y in sense_members]
+                        sense_embeddings = [self.matrix[x][y] for x, y in sense_members]
                         sense_centroids.append(np.mean(sense_embeddings, 0))
                 else:
                     fo.write(" is empty\n\n")
@@ -293,7 +288,7 @@ if __name__ == '__main__':
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_embeddings(args.pickle_emb, args.corpus, args.func_frac)
+    WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
