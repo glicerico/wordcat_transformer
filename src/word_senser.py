@@ -130,7 +130,7 @@ class WordSenseModel:
                         self.vocab_map[word] = []
                     self.vocab_map[word].append((sent_nbr, word_pos))  # Register instance location
 
-    def calculate_matrix(self):
+    def calculate_matrix(self, verbose=False):
         """
         Calculates embeddings for all word instances in corpus_file
         """
@@ -138,11 +138,15 @@ class WordSenseModel:
         for bert_tokens in self.sentences:
             sent_row = []  # Store sentence's probabilities with different fillers.
             words = self.get_words(bert_tokens)
+            word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
             token_count = 1  # Start from 1: ignore '[CLS]' embedding
             # Process all words in sentence
             for word_pos, word in enumerate(words):
-                word_len = len(self.apply_bert_tokenizer(word))  # Handle subwords
+                word_tokens = self.Bert_Model.tokenizer.tokenize(word)
+                replaced_sent = bert_tokens[:word_starts[word_pos + 1]] + word_tokens + bert_tokens[
+                                                                                     word_starts[word_pos + 2]:]
+                curr_prob = self.Bert_Model.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
 
                 if word in self.vocab_map.keys():  # Store embeddings for vocab words
                     embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
