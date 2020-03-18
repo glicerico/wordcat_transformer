@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import pickle
 from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 BOS_TOKEN = '[CLS]'
@@ -21,6 +22,33 @@ class BertLM:
             self.model.to(device_number)
 
         self.norm_dict = {}
+
+    def load_norm_scores(self, pickle_norm, norm_file):
+        """
+        If pickle normalization file is present, load scores; else, calculate them.
+        """
+        try:
+            with open(pickle_norm, 'rb') as h:
+                self.norm_dict = pickle.load(h)
+
+                print("NORMALIZATION SCORES FOUND!")
+
+        except:
+            print("NORMALIZATION SCORES File Not Found!! \n")
+            print("Performing calculation...")
+
+            if norm_file != '':
+                self.calculate_norm_dict(norm_file)
+                print("Normalization scores:")
+                print(self.norm_dict)
+            else:
+                print("Calculations without normalization scores:")
+                self.norm_dict = {}
+
+            with open(pickle_norm, 'wb') as h:
+                pickle.dump(self.norm_dict, h)
+
+            print("Data stored in " + pickle_norm)
 
     def tokenize_sent(self, sentence):
         tokenized_input = self.tokenizer.tokenize(sentence)
@@ -107,8 +135,9 @@ class BertLM:
         score = self.get_sentence_prob_directional(tokenized_input, verbose=verbose)
         if sent_len not in self.norm_dict:
             print("WARNING: No normalization for given sentence length!!\n")
-        # norm_score = self.norm_dict.get(sent_len, min(self.norm_dict.values()))
-        norm_score = self.norm_dict.get(sent_len, 1)
+        # Normalize against highest norm score, if no score for curr sent length
+        norm_score = self.norm_dict.get(sent_len, max(self.norm_dict.values()))
+        # norm_score = self.norm_dict.get(sent_len, 1)
         return score / norm_score
 
     def get_sentence_prob_directional(self, tokenized_input, verbose=False):
