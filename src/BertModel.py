@@ -7,32 +7,12 @@ EOS_TOKEN = '[SEP]'
 MASK_TOKEN = '[MASK]'
 
 
-class BERT:
-    def __init__(self, pretrained_model='bert-large-uncased', device_number='cuda:2', use_cuda=True,
-                 output_hidden_states=True):
+class BertLM:
+    def __init__(self, pretrained_model='bert-large-uncased', device_number='cuda:2', use_cuda=False):
         self.device_number = device_number
         self.use_cuda = use_cuda
 
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
-        self.model = BertModel.from_pretrained(pretrained_model, output_hidden_states=output_hidden_states)
-        with torch.no_grad():
-            self.model.eval()
-
-        if use_cuda:
-            self.model.to(device_number)
-
-    def tokenize_sent(self, sentence):
-        tokenized_input = self.tokenizer.tokenize(sentence)
-        if tokenized_input[0] != BOS_TOKEN:
-            tokenized_input.insert(0, BOS_TOKEN)
-        if tokenized_input[-1] != EOS_TOKEN:
-            tokenized_input.append(EOS_TOKEN)
-        return tokenized_input
-
-
-class BertLM(BERT):
-    def __init__(self, pretrained_model='bert-large-uncased', device_number='cuda:2', use_cuda=False):
-        BERT.__init__(self, pretrained_model=pretrained_model, device_number=device_number, use_cuda=use_cuda)
         self.model = BertForMaskedLM.from_pretrained(pretrained_model)  # Overwrite model
         with torch.no_grad():
             self.model.eval()
@@ -41,6 +21,14 @@ class BertLM(BERT):
             self.model.to(device_number)
 
         self.norm_dict = {}
+
+    def tokenize_sent(self, sentence):
+        tokenized_input = self.tokenizer.tokenize(sentence)
+        if tokenized_input[0] != BOS_TOKEN:
+            tokenized_input.insert(0, BOS_TOKEN)
+        if tokenized_input[-1] != EOS_TOKEN:
+            tokenized_input.append(EOS_TOKEN)
+        return tokenized_input
 
     def print_top_predictions(self, probs, k=5):
         """
@@ -119,8 +107,8 @@ class BertLM(BERT):
         score = self.get_sentence_prob_directional(tokenized_input, verbose=verbose)
         if sent_len not in self.norm_dict:
             print("WARNING: No normalization for given sentence length!!\n")
-        norm_score = self.norm_dict.get(sent_len, min(self.norm_dict.values()))
-        # norm_score = self.norm_dict.get(sent_len, 1)
+        # norm_score = self.norm_dict.get(sent_len, min(self.norm_dict.values()))
+        norm_score = self.norm_dict.get(sent_len, 1)
         return score / norm_score
 
     def get_sentence_prob_directional(self, tokenized_input, verbose=False):

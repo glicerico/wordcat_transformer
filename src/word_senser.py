@@ -14,7 +14,7 @@ from sklearn.cluster import KMeans, OPTICS, DBSCAN
 from tqdm import tqdm
 import warnings
 
-from BertModel import BERT
+from BertModel import BertLM
 
 warnings.filterwarnings('ignore')
 
@@ -28,33 +28,12 @@ class WordSenseModel:
         self.device_number = device_number
         self.use_cuda = use_cuda
 
-        self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
+        self.Bert_Model = BertLM(pretrained_model, device_number, use_cuda)
 
     def apply_bert_tokenizer(self, word):
         return self.Bert_Model.tokenizer.tokenize(word)
 
-    def get_bert_embeddings(self, tokens):
-        _ib = self.Bert_Model.tokenizer.convert_tokens_to_ids(tokens)
-        _st = [0] * len(_ib)
-        if self.use_cuda:
-            _t1, _t2 = torch.tensor([_ib]).to(self.device_number), torch.tensor([_st]).to(self.device_number)
-        else:
-            _t1, _t2 = torch.tensor([_ib]), torch.tensor([_st])
-
-        with torch.no_grad():
-            _, _, _encoded_layers = self.Bert_Model.model(_t1, token_type_ids=_t2)
-            # Average last 4 hidden layers (second best result from Devlin et al. 2019)
-            _e1 = _encoded_layers[-4:]
-            _e2 = torch.cat((_e1[0], _e1[1], _e1[2], _e1[3]), 0)
-            _e3 = torch.mean(_e2, dim=0)
-            if self.use_cuda:
-                _final_layer = _e3.cpu().numpy()
-            else:
-                _final_layer = _e3.numpy()
-
-        return _final_layer
-
-    def load_matrix(self, pickle_filename, corpus_file, func_frac):
+    def load_matrix(self, pickle_filename, corpus_file, func_frac, verbose=False):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
@@ -78,12 +57,12 @@ class WordSenseModel:
             print("MATRIX File Not Found!! \n")
 
             print("Loading vocabulary")
-            self.get_vocabulary(corpus_file)
+            self.get_vocabulary(corpus_file, verbose=verbose)
             with open(pickle_filename[:-6] + 'vocab', 'wb') as v:
                 pickle.dump(list(self.vocab_map.keys()), v)
 
             print("Calculate matrix...")
-            self.calculate_matrix()
+            self.calculate_matrix(verbose=verbose)
             print(f"Removing the top {func_frac} fraction of words")
             self.remove_function_words(func_frac)
 
@@ -112,7 +91,7 @@ class WordSenseModel:
         nbr_delete = int(len(sorted_vocab) * functional_threshold)  # Nbr of words to delete
         self.vocab_map = dict(sorted_vocab[:-nbr_delete])  # Delete most common words
 
-    def get_vocabulary(self, corpus_file):
+    def get_vocabulary(self, corpus_file, verbose=False):
         """
         Reads all word instances in file, stores their location
         :param corpus_file:     file to get vocabulary
@@ -131,6 +110,9 @@ class WordSenseModel:
                     # TODO: Can avoid storing coordinates if not CAPS target word in export_clusters
                     self.vocab_map[word].append((sent_nbr, word_pos, instance_nbr))  # Register instance location
                     instance_nbr += 1
+        if verbose:
+            print("Vocabulary:")
+            print(self.vocab_map)
 
     def calculate_matrix(self, verbose=False):
         """
@@ -204,7 +186,7 @@ class WordSenseModel:
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
 
-            if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
+            if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Word \"{word}\" frequency lower than threshold")
                 continue
 
@@ -224,7 +206,7 @@ class WordSenseModel:
 
     def export_clusters(self, fl, save_dir, word, labels):
         """
-        Write clustering results to file
+        Write clustering results to files
         :param fl:              handle for logging file
         :param save_dir:        Directory to save disambiguated senses
         :param word:            Current word to disambiguate
@@ -242,7 +224,7 @@ class WordSenseModel:
                 fo.write(f"Cluster #{i}")
                 if len(sense_members) > 0:  # Handle empty clusters
                     fo.write(": \n[")
-                    np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
+                    np.savetxt(fo, sense_members, fmt="(%s, %s, %s)", newline=", ")
                     fo.write(']\n')
                     # Write at most 3 sentence examples for the word sense
                     sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
@@ -255,7 +237,7 @@ class WordSenseModel:
 
                     # Calculate cluster centroid and save
                     if i >= 0:  # Don't calculate centroid for unclustered (noise) instances
-                        sense_embeddings = [self.matrix[x][y] for x, y in sense_members]
+                        sense_embeddings = [self.matrix[row] for _, _, row in sense_members]
                         sense_centroids.append(np.mean(sense_embeddings, 0))
                 else:
                     fo.write(" is empty\n\n")
@@ -279,6 +261,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--clustering', type=str, default='OPTICS', help='Clustering method to use')
     parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
+    parser.add_argument('--verbose', action='store_true', help='Print processing details')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
                                                                                'Embeddings to file')
 
@@ -296,7 +279,7 @@ if __name__ == '__main__':
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac)
+    WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac, verbose=args.verbose)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
