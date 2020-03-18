@@ -28,10 +28,10 @@ class WordSenseModel:
         self.device_number = device_number
         self.use_cuda = use_cuda
 
-        self.Bert_Model = BertLM(pretrained_model, device_number, use_cuda)
+        self.lang_mod = BertLM(pretrained_model, device_number, use_cuda)
 
     def apply_bert_tokenizer(self, word):
-        return self.Bert_Model.tokenizer.tokenize(word)
+        return self.lang_mod.tokenizer.tokenize(word)
 
     def load_matrix(self, pickle_filename, corpus_file, func_frac, verbose=False):
         """
@@ -78,7 +78,7 @@ class WordSenseModel:
         :param tokenized_sent:
         :return:
         """
-        sentence = self.Bert_Model.tokenizer.convert_tokens_to_string(tokenized_sent[1:-1])  # Ignore boundary tokens
+        sentence = self.lang_mod.tokenizer.convert_tokens_to_string(tokenized_sent[1:-1])  # Ignore boundary tokens
         return sentence.split()
 
     def remove_function_words(self, functional_threshold):
@@ -100,7 +100,7 @@ class WordSenseModel:
             instance_nbr = 0
             # Process each sentence in corpus
             for sent_nbr, sent in tqdm(enumerate(fi)):
-                bert_tokens = self.Bert_Model.tokenize_sent(sent)
+                bert_tokens = self.lang_mod.tokenize_sent(sent)
                 self.sentences.append(bert_tokens)
                 words = self.get_words(bert_tokens)
                 # Store word instances in vocab_map
@@ -136,10 +136,10 @@ class WordSenseModel:
                 embedding = []  # Store one word instance (sentence with blank) embedding
                 # Calculate sentence's probabilities with different filling words: embedding
                 for repl_word in self.vocab_map.keys():
-                    word_tokens = self.Bert_Model.tokenizer.tokenize(repl_word)
+                    word_tokens = self.lang_mod.tokenizer.tokenize(repl_word)
                     replaced_sent = bert_tokens[:word_starts[word_pos + 1]] + word_tokens + bert_tokens[
                                                                                      word_starts[word_pos + 2]:]
-                    curr_prob = self.Bert_Model.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
+                    curr_prob = self.lang_mod.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
                     embedding.append(curr_prob)
 
                 # Store this sentence embeddings in the general list
@@ -264,6 +264,8 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
                                                                                'Embeddings to file')
+    parser.add_argument('--norm_file', type=str, default='', help='Sentences file to use for normalization')
+    parser.add_argument('--norm_pickle', type=str, default='test.pickle', help='Pickle file to use for normalization')
 
     args = parser.parse_args()
 
@@ -277,6 +279,9 @@ if __name__ == '__main__':
 
     print("Loading WSD Model!")
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
+
+    # Calculate normalization scores if option is present
+    WSD.lang_mod.load_norm_scores(args.norm_pickle, args.norm_file)
 
     print("Obtaining word embeddings...")
     WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac, verbose=args.verbose)
