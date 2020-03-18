@@ -25,7 +25,6 @@ class WordSenseModel:
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
         self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
-
         self.device_number = device_number
         self.use_cuda = use_cuda
 
@@ -83,10 +82,10 @@ class WordSenseModel:
             with open(pickle_filename[:-6] + 'vocab', 'wb') as v:
                 pickle.dump(list(self.vocab_map.keys()), v)
 
-            print(f"Removing the top {func_frac} fraction of words")
-            self.remove_function_words(func_frac)
             print("Calculate matrix...")
             self.calculate_matrix()
+            print(f"Removing the top {func_frac} fraction of words")
+            self.remove_function_words(func_frac)
 
             with open(pickle_filename, 'wb') as h:
                 _data = (self.sentences, self.vocab_map, self.matrix)
@@ -119,6 +118,7 @@ class WordSenseModel:
         :param corpus_file:     file to get vocabulary
         """
         with open(corpus_file, 'r') as fi:
+            instance_nbr = 0
             # Process each sentence in corpus
             for sent_nbr, sent in tqdm(enumerate(fi)):
                 bert_tokens = self.Bert_Model.tokenize_sent(sent)
@@ -126,38 +126,42 @@ class WordSenseModel:
                 words = self.get_words(bert_tokens)
                 # Store word instances in vocab_map
                 for word_pos, word in enumerate(words):
-                    if word not in self.vocab_map.keys():
+                    if word not in self.vocab_map:
                         self.vocab_map[word] = []
-                    self.vocab_map[word].append((sent_nbr, word_pos))  # Register instance location
+                    # TODO: Can avoid storing coordinates if not CAPS target word in export_clusters
+                    self.vocab_map[word].append((sent_nbr, word_pos, instance_nbr))  # Register instance location
+                    instance_nbr += 1
 
     def calculate_matrix(self, verbose=False):
         """
         Calculates embeddings for all word instances in corpus_file
         """
+        instances = {}  # Stores matrix indexes for each instance embedding
+        embeddings_count = 0  # Counts embeddings created (matrix row nbr)
         # Process each sentence in corpus
         for bert_tokens in self.sentences:
-            sent_row = []  # Store sentence's probabilities with different fillers.
+            sent_rows = []
             words = self.get_words(bert_tokens)
             word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
-            token_count = 1  # Start from 1: ignore '[CLS]' embedding
-            # Process all words in sentence
+            # Replace all words in sentence to get their instance-embeddings
             for word_pos, word in enumerate(words):
-                word_tokens = self.Bert_Model.tokenizer.tokenize(word)
-                replaced_sent = bert_tokens[:word_starts[word_pos + 1]] + word_tokens + bert_tokens[
+                if word not in instances:
+                    instances[word] = []
+                instances[word].append(embeddings_count)
+                embeddings_count += 1
+                # self.build_embedding()
+                embedding = []  # Store one word instance (sentence with blank) embedding
+                # Calculate sentence's probabilities with different filling words: embedding
+                for repl_word in self.vocab_map.keys():
+                    word_tokens = self.Bert_Model.tokenizer.tokenize(repl_word)
+                    replaced_sent = bert_tokens[:word_starts[word_pos + 1]] + word_tokens + bert_tokens[
                                                                                      word_starts[word_pos + 2]:]
-                curr_prob = self.Bert_Model.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
+                    curr_prob = self.Bert_Model.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
+                    embedding.append(curr_prob)
 
-                if word in self.vocab_map.keys():  # Store embeddings for vocab words
-                    embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
-                    sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
-                else:  # If word not in vocab of interest, just use placeholder
-                    sent_embeddings.append(0)
-
-                token_count += word_len
-
-            # Store this sentence embeddings in the general list
-            self.matrix.append(sent_embeddings)
+                # Store this sentence embeddings in the general list
+                self.matrix.append(np.float32(embedding))  # Lower precision to save mem, speed
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """
@@ -198,7 +202,7 @@ class WordSenseModel:
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
-            curr_embeddings = [self.matrix[x][y] for x, y in instances]
+            curr_embeddings = [self.matrix[row] for _, _, row in instances]
 
             if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
                 print(f"Word \"{word}\" frequency lower than threshold")
@@ -244,7 +248,7 @@ class WordSenseModel:
                     sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
                     fo.write('Samples:\n')
                     # Write sample sentences to file, with focus word in CAPS for easier reading
-                    for sample, focus_word in sent_samples:
+                    for sample, focus_word, _ in sent_samples:
                         bold_sent = self.get_words(self.sentences[sample])
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
