@@ -8,6 +8,11 @@ EOS_TOKEN = '[SEP]'
 MASK_TOKEN = '[MASK]'
 
 
+class BertTok:
+    def __init__(self, pretrained_model='bert-large-uncased'):
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
+
+
 class BertLM:
     def __init__(self, pretrained_model='bert-large-uncased', device_number='cuda:2', use_cuda=False):
         self.device_number = device_number

@@ -303,12 +303,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
-    no_eval = False  # Flag to trigger evaluation
 
     if args.pickle_vocab:
         print(f"Using pickle vocabulary file to categorize")
         wc.load_vocabulary(vocab_pickle=args.pickle_vocab)
-        no_eval = True
     elif args.vocab:
         print("Using annotated vocabulary file to categorize")
         wc.load_vocabulary(vocab_txt=args.vocab)

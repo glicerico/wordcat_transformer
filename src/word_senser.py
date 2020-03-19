@@ -14,7 +14,8 @@ from sklearn.cluster import KMeans, OPTICS, DBSCAN
 from tqdm import tqdm
 import warnings
 
-from BertModel import BertLM
+from transformers import BertTokenizer
+from BertModel import BertLM, BertTok
 
 warnings.filterwarnings('ignore')
 
@@ -25,15 +26,16 @@ class WordSenseModel:
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
         self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
+        self.pretrained_model = pretrained_model
         self.device_number = device_number
         self.use_cuda = use_cuda
 
-        self.lang_mod = BertLM(pretrained_model, device_number, use_cuda)
+        self.lang_mod = None
 
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
 
-    def load_matrix(self, pickle_filename, corpus_file, func_frac, verbose=False):
+    def load_matrix(self, pickle_filename, corpus_file, func_frac, verbose=False, norm_pickle=None, norm_file=None):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
@@ -53,8 +55,17 @@ class WordSenseModel:
 
                 print("MATRIX FOUND!")
 
+            # Load tokenizer, needed by export_clusters method
+            self.lang_mod = BertTok(self.pretrained_model)
+
         except:
             print("MATRIX File Not Found!! \n")
+
+            print("Loading Bert MLM")
+            self.lang_mod = BertLM(self.pretrained_model, self.device_number, self.use_cuda)
+
+            # Calculate normalization scores if option is present
+            self.lang_mod.load_norm_scores(norm_pickle, norm_file)
 
             print("Loading vocabulary")
             self.get_vocabulary(corpus_file, verbose=verbose)
@@ -122,7 +133,7 @@ class WordSenseModel:
         embeddings_count = 0  # Counts embeddings created (matrix row nbr)
         # Process each sentence in corpus
         for bert_tokens in tqdm(self.sentences):
-            sent_rows = []
+            print(f"Processing sentence: {bert_tokens}")
             words = self.get_words(bert_tokens)
             word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
@@ -132,7 +143,6 @@ class WordSenseModel:
                     instances[word] = []
                 instances[word].append(embeddings_count)
                 embeddings_count += 1
-                # self.build_embedding()
                 embedding = []  # Store one word instance (sentence with blank) embedding
                 # Calculate sentence's probabilities with different filling words: embedding
                 for repl_word in self.vocab_map.keys():
@@ -280,11 +290,9 @@ if __name__ == '__main__':
     print("Loading WSD Model!")
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
-    # Calculate normalization scores if option is present
-    WSD.lang_mod.load_norm_scores(args.norm_pickle, args.norm_file)
-
     print("Obtaining word embeddings...")
-    WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac, verbose=args.verbose)
+    WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac, verbose=args.verbose, norm_pickle=args.norm_pickle,
+                    norm_file=args.norm_file)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
