@@ -682,6 +682,13 @@ Also, other sentences could benefit from some of these evaluations if they
 were saved.
 Ben suggested using [tries]()
 
+*******
+## Mar 18, 2020
+
+Started redesign of WSD to use BERT sentence probabilities instead of 
+final layers embeddings.
+Firs test is running overnight, trying to WSD smallWSD corpus.
+
 **********
 ## Mar 19, 2020
 
@@ -733,3 +740,8 @@ which I don't feel it's even worth storing in a trie. Or is it?
 I guess storing them may potentially be useful for random generated sentences.
 @ben this is what you have in mind to store in the trie, right? 
 Not only a given sentence probability as P(Not a real sentence).
+
+******************
+On the results of the first test, there was a memory error when clustering.
+Checking what went wrong, there shouldn't be a memory error with the
+smallWSD corpus.
