@@ -121,7 +121,7 @@ class WordSenseModel:
         instances = {}  # Stores matrix indexes for each instance embedding
         embeddings_count = 0  # Counts embeddings created (matrix row nbr)
         # Process each sentence in corpus
-        for bert_tokens in self.sentences:
+        for bert_tokens in tqdm(self.sentences):
             sent_rows = []
             words = self.get_words(bert_tokens)
             word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]

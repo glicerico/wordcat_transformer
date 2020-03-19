@@ -681,3 +681,55 @@ vocabulary.
 Also, other sentences could benefit from some of these evaluations if they
 were saved.
 Ben suggested using [tries]()
+
+**********
+## Mar 19, 2020
+
+On slack, Ben wrote today:
+*******
+@asuarez regarding the scalable version of the NeurOracular ULL approach... it seems there are two biggish things to work out... (i.e. things going beyond what we did in the POC work)
+
+10:07
+One is how to get a lot of sentence probabilities calculated in a feasible amount of compute resources.  My suggestion there was to build up a trie of word-sequence probabilities, filling it up incrementally as one makes each masked-word or masked-sentence prediction using the language model (using all the probabilistic predictions the language model makes for the masked word/sentence, not just the top prediction).   This should be straightforward-ish but will require attention to implementation details esp. making sure the trie implementation can handle huge tries, and ideally can handle the same trie being updated concurrently via multiple processors (which are each parsing separate portions of the corpus).
+*******
+
+My response:
+
+@ben, I agree these are two points to work on.
+
+Describing a bit the situation for @andre and others, about saving word-sequence probabilities, and also want to understand what you suggest to store:
+
+With the current way to calculate the probability of sentence "Not a real sentence", we need to ask Bert's Masked Language Model (MLM) prediction the following probabilities:
+
+FORWARD:
+```
+a) P(M1 = Not           |M1 M2 M3 M4)
+b) P(M2 = a             |Not M2 M3 M4)
+c) P(M3 = real          |Not a M3 M4)
+d) P(M4 = sentence      |Not a real M4)
+BACKWARD:
+e) P(M4 = sentence      |M1 M2 M3 M4)
+f) P(M3 = real          |M1 M2 M3 sentence)
+g) P(M2 = a             |M1 M2 real sentence)
+h) P(M1 = Not           |M1 a real sentence)
+```
+In some of the processes, e.g. WSD, I need to replace a word in the sentence with every other word in the vocabulary. For example, I would fill "Not ___ real sentence", and thus evaluate things like "Not dog real sentence", "Not quickly real sentence", etc.
+
+We can see that from the probabilities above, a), e) and f) are completely reusable as they are, for any word that fills the blank. Also, a) and e) can be obtained from the same MLM evaluation of Bert. Still more, b) and g) can also be reused for every word filling the blank, if we save all word predictions that BERT makes for M2 in them. So, only c), d) and h) need to be re-evaluated for every different word filling the blank.
+
+I am in the process of redesigning the code for such calculations to reduce approx half the computations, for sentences where we have to fill the blank with all vocabulary words.
+As this process is needed for WSD, I save a matrix with all sentences-with-blank vs vocabulary scores, which can be reused for word-category formation without the need to reevaluate anything in BERT.
+
+Now, the remaining evaluations c), d) and h), when evaluating fill-the-blank sentences, won't be very repeatable. E.g., for h) we will be evaluating things like
+
+h) P(M1 = Not           |M1 dog real sentence)
+
+or
+
+h) P(M1 = Not           |M1 quickly real sentence)
+
+which I don't feel it's even worth storing in a trie. Or is it?
+
+I guess storing them may potentially be useful for random generated sentences.
+@ben this is what you have in mind to store in the trie, right? 
+Not only a given sentence probability as P(Not a real sentence).
