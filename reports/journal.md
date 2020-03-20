@@ -745,3 +745,50 @@ Not only a given sentence probability as P(Not a real sentence).
 On the results of the first test, there was a memory error when clustering.
 Checking what went wrong, there shouldn't be a memory error with the
 smallWSD corpus.
+
+***********
+Added tokenizer-only class, to be used in wordsenser.
+
+******************
+## 20 Mar, 2020
+
+Slack exchange. Ben says:
+
+500 million sequences would be nice, figuring average sequence length of 20
+
+This is a rough estimate based on 40GB text file training data for GPT2, figuring 200M words or so per GB of text-file
+
+************
+My reply:
+
+@ben for a GPT2-sized training corpus, you're right that there
+will be around 500M sentences (or word sequences), but to estimate the
+probability of a sentence of length N, we need 2*N - 1 BERT predictions.
+ 
+For WSD and word-category formation, we then need to replace one word 
+of the sentence with a different one (fill in the blank). We can
+reuse half of those predictions, but still need to calculate around N of 
+them for each word in the vocabulary of interest for the task.
+Then, we replace the next word in the sentence with a blank and fill it
+with all words in the vocabulary of interest. 
+Again, we can reuse about half of the predictions, but still need to 
+calculate some new ones.
+And so on for each position in the sentence.
+
+Now, for grammar induction, many of the produced sentences are going to
+be ungrammatical, so probably not pre-stored in the trie from the sequences
+calculated in previous steps; meaning we also need to ask BERT for around
+N new predictions for them.
+
+So, I think if we were to use such large corpora, we would need way more
+than 500M stored values.
+Of course, we are probably going to use smaller corpora, and storing them
+on the fly as we calculate them (if not in the trie already) makes sense.
+
+@andre, it may also be relevant that the data that will be stored in the 
+trie are arrays with one floating point value per vocabulary word (in the 
+case of BERT's large model, that's around 30k values in every BERT 
+prediction).
+
+**************
+

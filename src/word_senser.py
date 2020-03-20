@@ -61,7 +61,7 @@ class WordSenseModel:
         except:
             print("MATRIX File Not Found!! \n")
 
-            print("Loading Bert MLM")
+            print("Loading Bert MLM...")
             self.lang_mod = BertLM(self.pretrained_model, self.device_number, self.use_cuda)
 
             # Calculate normalization scores if option is present
@@ -287,7 +287,6 @@ if __name__ == '__main__':
     else:
         print("Processing without CUDA!")
 
-    print("Loading WSD Model!")
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
