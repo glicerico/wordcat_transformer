@@ -19,6 +19,7 @@ from BertModel import BertLM, BertTok
 
 warnings.filterwarnings('ignore')
 
+MASK = '[MASK]'
 
 class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
@@ -144,16 +145,57 @@ class WordSenseModel:
                 instances[word].append(embeddings_count)
                 embeddings_count += 1
                 embedding = []  # Store one word instance (sentence with blank) embedding
+
+                # Calculate common part of sentence probability steps for all words to fill
+                # Will only be used when replacement word is composed of one token, otherwise, we need to do the
+                # whole calculation
+                left_sent = bert_tokens[:word_starts[word_pos + 1]]
+                right_sent = bert_tokens[word_starts[word_pos + 2]:]
+                common_prob_forw, common_prob_back = self.get_common_probs(left_sent, right_sent)
+
                 # Calculate sentence's probabilities with different filling words: embedding
                 for repl_word in self.vocab_map.keys():
                     word_tokens = self.lang_mod.tokenizer.tokenize(repl_word)
-                    replaced_sent = bert_tokens[:word_starts[word_pos + 1]] + word_tokens + bert_tokens[
-                                                                                     word_starts[word_pos + 2]:]
-                    curr_prob = self.lang_mod.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
+                    if len(word_tokens) > 1:  # Ignore common probs; do whole calculation
+                        replaced_sent = left_sent + word_tokens + right_sent
+                        curr_prob = self.lang_mod.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
+                    else:
+                        curr_prob = self.complete_probs_normalized(common_prob_forw, common_prob_back,
+                                                                           left_sent, right_sent,
+                                                                           word_tokens)
                     embedding.append(curr_prob)
 
                 # Store this sentence embeddings in the general list
                 self.matrix.append(np.float32(embedding))  # Lower precision to save mem, speed
+
+    def get_common_probs(self, left_sent, right_sent):
+        """
+        Calculate partial forward and backwards probabilities of sentence probability estimation, for
+        the sections that are common to all iterations of a fill-in-the-blank process.
+        :param left_sent:   Tokens before the blank
+        :param right_sent:  Tokens after the blank
+        :return:
+        """
+        left_masks = [MASK] * len(left_sent)
+        right_masks = [MASK] * len(right_sent)
+        temp_left = left_sent[:]
+        temp_right = right_sent[:]
+
+        repl_sent = left_masks + [MASK] + right_masks
+        #evaluate and take prediction for pos 1 and -1
+
+        for i in range(1, len(left_sent) - 1):  # Skip [CLS] token
+            temp_left[-i] = MASK
+            repl_sent = temp_left + [MASK] + right_masks
+            # Evaluate and take prediction for len(left_sent) + 1 - i
+
+        for j in range(len(right_sent) - 2):
+            temp_right[j] = MASK
+            repl_sent = left_masks + [MASK] + temp_right
+            # Evaluate and take prediction for len(left_sent) + 1 + i
+
+        if len(left_sent) == 1:  # Replacement word is first word
+
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """
