@@ -22,11 +22,11 @@ class BertLM:
         self.model = BertForMaskedLM.from_pretrained(pretrained_model)  # Overwrite model
         with torch.no_grad():
             self.model.eval()
-
         if use_cuda:
             self.model.to(device_number)
 
         self.norm_dict = {}
+        self.sm = torch.nn.Softmax(dim=0)
 
     def load_norm_scores(self, pickle_norm, norm_file):
         """
@@ -79,7 +79,7 @@ class BertLM:
         print(f"Ordered top predicted tokens: {top_tokens}")
         print(f"Ordered top predicted values: {probs[sorted_indexes]}")
 
-    def get_directional_prob(self, sm, tokenized_input, i, direction, verbose=False):
+    def get_directional_prob(self, tokenized_input, i, direction, verbose=False):
         current_tokens = tokenized_input[:]
         if direction == 'backwards':
             current_tokens[1:i + 1] = [MASK_TOKEN for j in range(i)]
@@ -89,7 +89,7 @@ class BertLM:
             print("Direction can only be 'forward' or 'backwards'")
             exit()
         predictions = self.get_predictions(current_tokens, verbose=verbose)
-        probs = sm(predictions[0, i])  # Softmax to get probabilities for token i
+        probs = self.sm(predictions[0, i])  # Softmax to get probabilities for token i
         if verbose:
             self.print_top_predictions(probs)
 
@@ -168,8 +168,6 @@ class BertLM:
         :param verbose: Print information about the obtained probabilities or not.
         :return: Log of geometric average of each prediction: sort of sentence prob. normalized by sentence length.
         """
-        sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
-
         # Pre-process sentence, adding special tokens
         ids_input = self.tokenizer.convert_tokens_to_ids(tokenized_input)
         if verbose:
@@ -179,8 +177,8 @@ class BertLM:
         log_sent_prob_backwards = 0
         # Mask non-special tokens in forward and backwards directions; calculate their probabilities
         for i in range(1, len(tokenized_input) - 1):  # Don't loop first and last tokens
-            probs_forward = self.get_directional_prob(sm, tokenized_input, i, 'forward', verbose=verbose)
-            probs_backwards = self.get_directional_prob(sm, tokenized_input, i, 'backwards', verbose=verbose)
+            probs_forward = self.get_directional_prob(tokenized_input, i, 'forward', verbose=verbose)
+            probs_backwards = self.get_directional_prob(tokenized_input, i, 'backwards', verbose=verbose)
             log_prob_forward = probs_forward[ids_input[i]]  # Prediction for masked word
             log_prob_forward = np.log10(log_prob_forward.detach().numpy())
             log_prob_backwards = probs_backwards[ids_input[i]]  # Prediction for masked word
@@ -215,8 +213,6 @@ class BertLM:
         :param verbose: Print information about the obtained probabilities or not.
         :return: Log of geometric average of each prediction: sort of sentence prob. normalized by sentence length.
         """
-        sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
-
         # Pre-process sentence, adding special tokens
         sent_len = len(tokenized_input)
         ids_input = self.tokenizer.convert_tokens_to_ids(tokenized_input)
@@ -227,8 +223,8 @@ class BertLM:
         sent_prob_backwards = 1
         # Mask non-special tokens in forward and backwards directions; calculate their probabilities
         for i in range(1, len(tokenized_input) - 1):  # Don't loop first and last tokens
-            probs_forward = self.get_directional_prob(sm, tokenized_input, i, 'forward', verbose=verbose)
-            probs_backwards = self.get_directional_prob(sm, tokenized_input, i, 'backwards', verbose=verbose)
+            probs_forward = self.get_directional_prob(tokenized_input, i, 'forward', verbose=verbose)
+            probs_backwards = self.get_directional_prob(tokenized_input, i, 'backwards', verbose=verbose)
             prob_forward = probs_forward[ids_input[i]]  # Prediction for masked word
             prob_backwards = probs_backwards[ids_input[i]]  # Prediction for masked word
             sent_prob_forward *= np.power(prob_forward.detach().cpu().numpy(), 1 / sent_len)
@@ -259,8 +255,6 @@ class BertLM:
         :param verbose: Print information about the obtained probabilities or not.
         :return: Log of geometric average of each prediction: sort of sentence prob. normalized by sentence length.
         """
-        sm = torch.nn.Softmax(dim=0)  # used to convert last hidden state to probs
-
         # Pre-process sentence, adding special tokens
         sent_len = len(tokenized_input)
         ids_input = self.tokenizer.convert_tokens_to_ids(tokenized_input)
@@ -277,7 +271,7 @@ class BertLM:
             else:
                 masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokenized)])
             predictions = self.model(masked_input)[0]
-            current_probs = sm(predictions[0, i])  # Softmax to get probabilities
+            current_probs = self.sm(predictions[0, i])  # Softmax to get probabilities
             current_prob = current_probs[ids_input[i]]  # Prediction for masked word
 
             sum_lp += np.log(current_prob.detach().numpy())
