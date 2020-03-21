@@ -88,10 +88,22 @@ class BertLM:
         else:
             print("Direction can only be 'forward' or 'backwards'")
             exit()
-
+        predictions = self.get_predictions(current_tokens, verbose=verbose)
+        probs = sm(predictions[0, i])  # Softmax to get probabilities for token i
         if verbose:
-            print()
-            print(current_tokens)
+            self.print_top_predictions(probs)
+
+        return probs
+
+    def get_predictions(self, current_tokens, verbose=False):
+        """
+        Directly processes current_tokens to be sent to transformer, and returns its predictions (logits)
+        :param current_tokens:  Tokens to be sent to transformer model
+        :param verbose:
+        :return:                Logit predictions for all tokens in current_tokens
+        """
+        if verbose:
+            print(f"\n{current_tokens}")
 
         if self.use_cuda:
             masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokens)]).to(self.device_number)
@@ -99,12 +111,7 @@ class BertLM:
             masked_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(current_tokens)])
             
         predictions = self.model(masked_input)
-        predictions = predictions[0]
-        probs = sm(predictions[0, i])  # Softmax to get probabilities
-        if verbose:
-            self.print_top_predictions(probs)
-
-        return probs  # Model predictions
+        return predictions[0]
 
     def calculate_norm_dict(self, sentences_file):
         """
