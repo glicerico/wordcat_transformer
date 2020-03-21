@@ -5,7 +5,6 @@
 
 import os
 import pickle
-import torch
 import argparse
 import numpy as np
 import random as rand
@@ -20,6 +19,7 @@ from BertModel import BertLM, BertTok
 warnings.filterwarnings('ignore')
 
 MASK = '[MASK]'
+
 
 class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
@@ -168,34 +168,72 @@ class WordSenseModel:
                 # Store this sentence embeddings in the general list
                 self.matrix.append(np.float32(embedding))  # Lower precision to save mem, speed
 
-    def get_common_probs(self, left_sent, right_sent):
+    def get_common_probs(self, left_sent, right_sent, verbose=False):
         """
         Calculate partial forward and backwards probabilities of sentence probability estimation, for
         the sections that are common to all iterations of a fill-in-the-blank process.
+        Example sentence: "Not ___ real sentence". We need probabilities:
+        FORWARD:
+        a) P(M1 = Not           |M1 M2 M3 M4)
+        b) P(M2 = ___           |Not M2 M3 M4)
+        c) P(M3 = real          |Not ___ M3 M4)
+        d) P(M4 = sentence      |Not ___ real M4)
+        BACKWARD:
+        e) P(M4 = sentence      |M1 M2 M3 M4)
+        f) P(M3 = real          |M1 M2 M3 sentence)
+        g) P(M2 = ___           |M1 M2 real sentence)
+        h) P(M1 = Not           |M1 ___ real sentence)
+        This method calculates a) as , e) * f) as
+        Also, returns the whole vocabulary prediction array for both b) and g), to be used by every
+        word filling the blank.
         :param left_sent:   Tokens before the blank
         :param right_sent:  Tokens after the blank
+        :param verbose:
         :return:
         """
-        left_masks = [MASK] * len(left_sent)
-        right_masks = [MASK] * len(right_sent)
+        masks_left = [MASK] * len(left_sent)
+        masks_right = [MASK] * len(right_sent)
         temp_left = left_sent[:]
         temp_right = right_sent[:]
+        log_common_prob_forward = 0
+        log_common_prob_backwards = 0
 
-        repl_sent = left_masks + [MASK] + right_masks
-        #evaluate and take prediction for pos 1 and -1
+        # Estimate a) and e) if they are not the position of the blank
+        repl_sent = masks_left + [MASK] + masks_right  # Fully masked sentence
+        predictions = self.lang_mod.get_predictions(repl_sent)
+        if len(left_sent) > 1:
+            probs_first = self.lang_mod.sm(predictions[0, 1])  # Softmax to get probabilities for first (sub)word
+            if verbose:
+                self.lang_mod.print_top_predictions(probs_first)
+            log_prob_first = probs_first[self.lang_mod.tokenizer.convert_tokens_to_ids(left_sent[1])]
+            log_prob_first = np.log10(log_prob_first.detach().numpy())
+            log_common_prob_forward += log_prob_first
 
+        if len(right_sent) > 1:
+            probs_last = self.lang_mod.sm(predictions[0, -2])  # Softmax to get probabilities for last (sub)word
+            if verbose:
+                self.lang_mod.print_top_predictions(probs_last)
+            log_prob_last = probs_last[self.lang_mod.tokenizer.convert_tokens_to_ids(left_sent[1])]
+            log_prob_last = np.log10(log_prob_last.detach().numpy())
+            log_common_prob_backwards += log_prob_last
+
+        # Get all predictions for b)
+        repl_sent = temp_left + [MASK] + masks_right
+
+        # Get all predictions for g)
+        repl_sent = masks_left + [MASK] + temp_right
+
+        # Estimate common probs for forward sentence probability
         for i in range(1, len(left_sent) - 1):  # Skip [CLS] token
             temp_left[-i] = MASK
-            repl_sent = temp_left + [MASK] + right_masks
+            repl_sent = temp_left + [MASK] + masks_right
             # Evaluate and take prediction for len(left_sent) + 1 - i
 
+        # Estimate common probs for backwards sentence probability (f in the example)
         for j in range(len(right_sent) - 2):
             temp_right[j] = MASK
-            repl_sent = left_masks + [MASK] + temp_right
+            repl_sent = masks_left + [MASK] + temp_right
             # Evaluate and take prediction for len(left_sent) + 1 + i
-
-        if len(left_sent) == 1:  # Replacement word is first word
-
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """

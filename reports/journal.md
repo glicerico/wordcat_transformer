@@ -708,8 +708,8 @@ Describing a bit the situation for @andre and others, about saving word-sequence
 
 With the current way to calculate the probability of sentence "Not a real sentence", we need to ask Bert's Masked Language Model (MLM) prediction the following probabilities:
 
-FORWARD:
 ```
+FORWARD:
 a) P(M1 = Not           |M1 M2 M3 M4)
 b) P(M2 = a             |Not M2 M3 M4)
 c) P(M3 = real          |Not a M3 M4)
