@@ -136,15 +136,13 @@ class BertLM:
         # self.norm_dict = {k: v[1] / v[0] for k, v in counts_probs.items()}
         self.norm_dict = {k: np.power(10, v[1] / v[0]) for k, v in counts_probs.items()}
 
-    def get_sentence_prob_normalized(self, tokenized_input,  verbose=False):
+    def normalize_score(self, sent_len, score):
         """
         Return length-normalized sentence probability. Divides by value in norm_dict
-        :param tokenized_input: Input sentence
-        :param verbose:
+        :param sent_len         Num of tokens in sentence (incl boundary tokens)
+        :param score
         :return:
         """
-        sent_len = len(tokenized_input)  # Num of tokens in sentence (incl boundary tokens)
-        score = self.get_sentence_prob_directional(tokenized_input, verbose=verbose)
         if sent_len not in self.norm_dict:
             print("WARNING: No normalization for given sentence length!!\n")
         # Normalize against highest norm score, if no score for curr sent length
@@ -195,6 +193,7 @@ class BertLM:
             print(f"Raw forward sentence probability: {log_sent_prob_forward}")
             print(f"Raw backward sentence probability: {log_sent_prob_backwards}\n")
             print(f"Average normalized sentence prob: {log_geom_mean_sent_prob}\n")
+
         return np.power(10, log_geom_mean_sent_prob)
 
     def get_sentence_prob_avg_directional(self, tokenized_input, verbose=False):
