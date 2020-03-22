@@ -151,22 +151,68 @@ class WordSenseModel:
                 # whole calculation
                 left_sent = bert_tokens[:word_starts[word_pos + 1]]
                 right_sent = bert_tokens[word_starts[word_pos + 2]:]
-                common_prob_forw, common_prob_back = self.get_common_probs(left_sent, right_sent)
+                common_probs = self.get_common_probs(left_sent, right_sent, verbose=verbose)
 
                 # Calculate sentence's probabilities with different filling words: embedding
                 for repl_word in self.vocab_map.keys():
                     word_tokens = self.lang_mod.tokenizer.tokenize(repl_word)
                     if len(word_tokens) > 1:  # Ignore common probs; do whole calculation
                         replaced_sent = left_sent + word_tokens + right_sent
-                        curr_prob = self.lang_mod.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
+                        score = self.get_sentence_prob_directional(replaced_sent, verbose=verbose)
+                        sent_len = len(replaced_sent)
                     else:
-                        curr_prob = self.complete_probs_normalized(common_prob_forw, common_prob_back,
-                                                                           left_sent, right_sent,
-                                                                           word_tokens)
+                        score = self.complete_probs_normalized(common_probs, left_sent, right_sent, repl_word)
+                        sent_len = len(left_sent) + len(right_sent) + 1
+
+                    curr_prob = self.lang_mod.normalize_score(sent_len, score, verbose=verbose)
                     embedding.append(curr_prob)
 
                 # Store this sentence embeddings in the general list
                 self.matrix.append(np.float32(embedding))  # Lower precision to save mem, speed
+
+    def complete_probs_normalized(self, common_probs, left_sent, right_sent, word_token, verbose=False):
+        """
+        Given the common probability calculations for a sentence, complete calculations filling blank with word_tokens
+        """
+        preds_blank_left, preds_blank_right, log_sent_prob_forw, log_sent_prob_back = common_probs
+        temp_left = left_sent[:]
+        temp_right = right_sent[:]
+
+        # Get probabilities for word filling the blank: b) and g)
+        log_sent_prob_forw += self.get_log_prob(preds_blank_left, word_token, len(left_sent), verbose=verbose)
+        log_sent_prob_back += self.get_log_prob(preds_blank_right, word_token, len(left_sent), verbose=verbose)
+
+        # Get remaining probs with blank filled: c), d), and h)
+        for i in range(1, len(right_sent)):  # d), c)
+            temp_right[-1 - i] = [MASK]
+            repl_sent = left_sent + [word_token] + temp_right
+            predictions = self.lang_mod.get_predictions(repl_sent)
+            log_sent_prob_forw += self.get_log_prob(predictions, right_sent[-1 - i], -1 - i, verbose=verbose)
+        for j in range(len(left_sent) - 1):  # h)
+            temp_left[1 + j] = [MASK]
+            repl_sent = temp_left + [word_token] + right_sent
+            predictions = self.lang_mod.get_predictions(repl_sent)
+            log_sent_prob_back += self.get_log_prob(predictions, left_sent[1 + j], 1 + j, verbose=verbose)
+
+        # Obtain geometric average of forward and backward probs
+        log_geom_mean_sent_prob = 0.5 * (log_sent_prob_forw + log_sent_prob_back)
+        if verbose:
+            print(f"Raw forward sentence probability: {log_sent_prob_forw}")
+            print(f"Raw backward sentence probability: {log_sent_prob_back}\n")
+            print(f"Average normalized sentence prob: {log_geom_mean_sent_prob}\n")
+
+        return np.power(10, log_geom_mean_sent_prob)
+
+    def get_log_prob(self, predictions, token, position, verbose=False):
+        """
+        Given BERT's predictions, return probability for required token, in required position
+        """
+        probs_first = self.lang_mod.sm(predictions[0, position])  # Softmax to get probabilities for first (sub)word
+        if verbose:
+            self.lang_mod.print_top_predictions(probs_first)
+        log_prob_first = probs_first[self.lang_mod.tokenizer.convert_tokens_to_ids(token)]
+
+        return np.log10(log_prob_first.detach().numpy())
 
     def get_common_probs(self, left_sent, right_sent, verbose=False):
         """
@@ -183,57 +229,52 @@ class WordSenseModel:
         f) P(M3 = real          |M1 M2 M3 sentence)
         g) P(M2 = ___           |M1 M2 real sentence)
         h) P(M1 = Not           |M1 ___ real sentence)
-        This method calculates a) as , e) * f) as
-        Also, returns the whole vocabulary prediction array for both b) and g), to be used by every
-        word filling the blank.
         :param left_sent:   Tokens before the blank
         :param right_sent:  Tokens after the blank
         :param verbose:
-        :return:
+        :return:            log10(a)) as log_common_prob_forw,
+                            log10(e) * f)) as log_common_prob_back,
+                            The whole vocabulary prediction array for both b) and g), to be used later by all
+                            words filling the blank.
         """
         masks_left = [MASK] * len(left_sent)
         masks_right = [MASK] * len(right_sent)
         temp_left = left_sent[:]
         temp_right = right_sent[:]
-        log_common_prob_forward = 0
-        log_common_prob_backwards = 0
+        log_common_prob_forw = 0
+        log_common_prob_back = 0
 
         # Estimate a) and e) if they are not the position of the blank
         repl_sent = masks_left + [MASK] + masks_right  # Fully masked sentence
         predictions = self.lang_mod.get_predictions(repl_sent)
         if len(left_sent) > 1:
-            probs_first = self.lang_mod.sm(predictions[0, 1])  # Softmax to get probabilities for first (sub)word
-            if verbose:
-                self.lang_mod.print_top_predictions(probs_first)
-            log_prob_first = probs_first[self.lang_mod.tokenizer.convert_tokens_to_ids(left_sent[1])]
-            log_prob_first = np.log10(log_prob_first.detach().numpy())
-            log_common_prob_forward += log_prob_first
-
+            log_common_prob_forw += self.get_log_prob(predictions, left_sent[1], 1, verbose=verbose)
         if len(right_sent) > 1:
-            probs_last = self.lang_mod.sm(predictions[0, -2])  # Softmax to get probabilities for last (sub)word
-            if verbose:
-                self.lang_mod.print_top_predictions(probs_last)
-            log_prob_last = probs_last[self.lang_mod.tokenizer.convert_tokens_to_ids(left_sent[1])]
-            log_prob_last = np.log10(log_prob_last.detach().numpy())
-            log_common_prob_backwards += log_prob_last
+            log_common_prob_back += self.get_log_prob(predictions, right_sent[-2], len(repl_sent) - 2, verbose=verbose)
 
         # Get all predictions for b)
-        repl_sent = temp_left + [MASK] + masks_right
+        repl_sent = left_sent + [MASK] + masks_right
+        preds_blank_left = self.lang_mod.get_predictions(repl_sent)
 
         # Get all predictions for g)
-        repl_sent = masks_left + [MASK] + temp_right
+        repl_sent = masks_left + [MASK] + right_sent
+        preds_blank_right = self.lang_mod.get_predictions(repl_sent)
 
         # Estimate common probs for forward sentence probability
         for i in range(1, len(left_sent) - 1):  # Skip [CLS] token
             temp_left[-i] = MASK
             repl_sent = temp_left + [MASK] + masks_right
-            # Evaluate and take prediction for len(left_sent) + 1 - i
+            predictions = self.lang_mod.get_predictions(repl_sent)
+            log_common_prob_forw += self.get_log_prob(predictions, left_sent[-i], len(left_sent) - i, verbose=verbose)
 
         # Estimate common probs for backwards sentence probability (f in the example)
         for j in range(len(right_sent) - 2):
             temp_right[j] = MASK
             repl_sent = masks_left + [MASK] + temp_right
-            # Evaluate and take prediction for len(left_sent) + 1 + i
+            predictions = self.lang_mod.get_predictions(repl_sent)
+            log_common_prob_back += self.get_log_prob(predictions, right_sent[j], len(left_sent) + 1 + j, verbose=verbose)
+
+        return preds_blank_left, preds_blank_right, log_common_prob_forw, log_common_prob_back
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """
@@ -353,7 +394,7 @@ if __name__ == '__main__':
     parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
-                                                                               'Embeddings to file')
+                                                                              'Embeddings to file')
     parser.add_argument('--norm_file', type=str, default='', help='Sentences file to use for normalization')
     parser.add_argument('--norm_pickle', type=str, default='test.pickle', help='Pickle file to use for normalization')
 
@@ -380,4 +421,3 @@ if __name__ == '__main__':
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")
-
