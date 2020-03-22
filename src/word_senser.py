@@ -164,7 +164,7 @@ class WordSenseModel:
                         score = self.complete_probs_normalized(common_probs, left_sent, right_sent, repl_word)
                         sent_len = len(left_sent) + len(right_sent) + 1
 
-                    curr_prob = self.lang_mod.normalize_score(sent_len, score, verbose=verbose)
+                    curr_prob = self.lang_mod.normalize_score(sent_len, score)
                     embedding.append(curr_prob)
 
                 # Store this sentence embeddings in the general list
@@ -184,12 +184,12 @@ class WordSenseModel:
 
         # Get remaining probs with blank filled: c), d), and h)
         for i in range(1, len(right_sent)):  # d), c)
-            temp_right[-1 - i] = [MASK]
+            temp_right[-1 - i] = MASK
             repl_sent = left_sent + [word_token] + temp_right
             predictions = self.lang_mod.get_predictions(repl_sent)
             log_sent_prob_forw += self.get_log_prob(predictions, right_sent[-1 - i], -1 - i, verbose=verbose)
         for j in range(len(left_sent) - 1):  # h)
-            temp_left[1 + j] = [MASK]
+            temp_left[1 + j] = MASK
             repl_sent = temp_left + [word_token] + right_sent
             predictions = self.lang_mod.get_predictions(repl_sent)
             log_sent_prob_back += self.get_log_prob(predictions, left_sent[1 + j], 1 + j, verbose=verbose)
