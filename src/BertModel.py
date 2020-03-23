@@ -46,14 +46,12 @@ class BertLM:
                 self.calculate_norm_dict(norm_file)
                 print("Normalization scores:")
                 print(self.norm_dict)
+                with open(pickle_norm, 'wb') as h:
+                    pickle.dump(self.norm_dict, h)
+                print("Data stored in " + pickle_norm)
             else:
                 print("Calculations without normalization scores:")
-                self.norm_dict = {}
-
-            with open(pickle_norm, 'wb') as h:
-                pickle.dump(self.norm_dict, h)
-
-            print("Data stored in " + pickle_norm)
+                self.norm_dict = {0: 1}  # Normalization is 1
 
     def tokenize_sent(self, sentence):
         tokenized_input = self.tokenizer.tokenize(sentence)
