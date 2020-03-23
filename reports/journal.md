@@ -791,4 +791,45 @@ case of BERT's large model, that's around 30k values in every BERT
 prediction).
 
 **************
+## 23 March, 2020
+In the past days, I changed the WSD to use sentence probabilities instead
+of BERT's final layers.
+Algorithm is working, and test is running to see the quality of the produced
+word senses.
 
+Also, redesigned WSD to reuse around half of the sentence probabilities
+used in the process, so it runs faster.
+In my laptop, running time decreased to less than half, which is what I
+expected.
+Running a longer experiment now in `nova` to see speedup.
+I made sure during debugging that the sentence probabilities obtained are
+the same as for a single sentence in the jupyter notebook, so I'm quite
+confident about it both for sentences with and without sub-words :)
+
+@senna asked on slack to give a high level description of the algorithm
+where I would be using the tries.
+***************
+@senna:
+Yes I think we need a tailor-made one. Specially because of this comment from Ben: "and ideally can handle the same trie being updated concurrently via multiple processors (which are each parsing separate portions of the corpus)."  But also because your problem have some details that would be better explored by using a specialized data structure (for example the "mask position" integer)
+
+I'm currently working in a possible design for it.
+Do you have a higher level description of the algorithm?
+************
+@glicerico:
+Sure. There is only one part where we would need to write or read from the trie, and that is for sentence probability evaluation. Each sentence probability evaluation requires a number of BERT predictions, which is what we will be storing in the trie.
+
+Not so high level, but this is how we calculate a sentence probability P(S):
+```
+P(S) = (P_f * P_b) ^ (1/2), where
+P_f = P(w_0) * P(w_1|w_0) * P(w_2|w_0, w_1) * ... * P(w_N)
+P_b = P(w_N-1|w_N) * P(w_N-2|w_N-1, w_N) * ... * P(w_0|w_1, w_2, ... ,w_N)
+```
+and each factor in P_f and P_b requires a BERT prediction (or trie lookup).
+
+There's two main parts where we need to use sentence probabilities in the process.
+
+First is word sense disambiguation (WSD), where we build word-instance vectors where each vector component is a sentence probability replacing the word-instance of interest with all other words in the vocabulary. Then we cluster those vectors to get word-senses.
+
+Second part is grammar induction, where we randomly generate sentences that follow a given explicit grammar and compare their probability against sentences generated from a distortion of that grammar. This way, we evaluate if a grammar is close to the grammar implicit in BERT, and it's an iterative process to approximate the grammar in BERT.
+
+We submitted a paper explaining with more detail, let me know if that would be useful.
