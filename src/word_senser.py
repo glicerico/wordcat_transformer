@@ -158,10 +158,10 @@ class WordSenseModel:
                     word_tokens = self.lang_mod.tokenizer.tokenize(repl_word)
                     if len(word_tokens) > 1:  # Ignore common probs; do whole calculation
                         replaced_sent = left_sent + word_tokens + right_sent
-                        score = self.get_sentence_prob_directional(replaced_sent, verbose=verbose)
+                        score = self.lang_mod.get_sentence_prob_directional(replaced_sent, verbose=verbose)
                         sent_len = len(replaced_sent)
                     else:
-                        score = self.complete_probs_normalized(common_probs, left_sent, right_sent, repl_word)
+                        score = self.complete_probs(common_probs, left_sent, right_sent, repl_word)
                         sent_len = len(left_sent) + len(right_sent) + 1
 
                     curr_prob = self.lang_mod.normalize_score(sent_len, score)
@@ -170,7 +170,7 @@ class WordSenseModel:
                 # Store this sentence embeddings in the general list
                 self.matrix.append(np.float32(embedding))  # Lower precision to save mem, speed
 
-    def complete_probs_normalized(self, common_probs, left_sent, right_sent, word_token, verbose=False):
+    def complete_probs(self, common_probs, left_sent, right_sent, word_token, verbose=False):
         """
         Given the common probability calculations for a sentence, complete calculations filling blank with word_tokens
         """
