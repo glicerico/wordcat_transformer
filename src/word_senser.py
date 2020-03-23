@@ -237,8 +237,8 @@ class WordSenseModel:
                             The whole vocabulary prediction array for both b) and g), to be used later by all
                             words filling the blank.
         """
-        masks_left = [MASK] * len(left_sent)
-        masks_right = [MASK] * len(right_sent)
+        masks_left = ['[CLS]'] + [MASK] * (len(left_sent) - 1)
+        masks_right = [MASK] * (len(right_sent) - 1) + ['[SEP]']
         temp_left = left_sent[:]
         temp_right = right_sent[:]
         log_common_prob_forw = 0
