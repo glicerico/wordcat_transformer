@@ -681,3 +681,114 @@ vocabulary.
 Also, other sentences could benefit from some of these evaluations if they
 were saved.
 Ben suggested using [tries]()
+
+*******
+## Mar 18, 2020
+
+Started redesign of WSD to use BERT sentence probabilities instead of 
+final layers embeddings.
+Firs test is running overnight, trying to WSD smallWSD corpus.
+
+**********
+## Mar 19, 2020
+
+On slack, Ben wrote today:
+*******
+@asuarez regarding the scalable version of the NeurOracular ULL approach... it seems there are two biggish things to work out... (i.e. things going beyond what we did in the POC work)
+
+10:07
+One is how to get a lot of sentence probabilities calculated in a feasible amount of compute resources.  My suggestion there was to build up a trie of word-sequence probabilities, filling it up incrementally as one makes each masked-word or masked-sentence prediction using the language model (using all the probabilistic predictions the language model makes for the masked word/sentence, not just the top prediction).   This should be straightforward-ish but will require attention to implementation details esp. making sure the trie implementation can handle huge tries, and ideally can handle the same trie being updated concurrently via multiple processors (which are each parsing separate portions of the corpus).
+*******
+
+My response:
+
+@ben, I agree these are two points to work on.
+
+Describing a bit the situation for @andre and others, about saving word-sequence probabilities, and also want to understand what you suggest to store:
+
+With the current way to calculate the probability of sentence "Not a real sentence", we need to ask Bert's Masked Language Model (MLM) prediction the following probabilities:
+
+```
+FORWARD:
+a) P(M1 = Not           |M1 M2 M3 M4)
+b) P(M2 = a             |Not M2 M3 M4)
+c) P(M3 = real          |Not a M3 M4)
+d) P(M4 = sentence      |Not a real M4)
+BACKWARD:
+e) P(M4 = sentence      |M1 M2 M3 M4)
+f) P(M3 = real          |M1 M2 M3 sentence)
+g) P(M2 = a             |M1 M2 real sentence)
+h) P(M1 = Not           |M1 a real sentence)
+```
+In some of the processes, e.g. WSD, I need to replace a word in the sentence with every other word in the vocabulary. For example, I would fill "Not ___ real sentence", and thus evaluate things like "Not dog real sentence", "Not quickly real sentence", etc.
+
+We can see that from the probabilities above, a), e) and f) are completely reusable as they are, for any word that fills the blank. Also, a) and e) can be obtained from the same MLM evaluation of Bert. Still more, b) and g) can also be reused for every word filling the blank, if we save all word predictions that BERT makes for M2 in them. So, only c), d) and h) need to be re-evaluated for every different word filling the blank.
+
+I am in the process of redesigning the code for such calculations to reduce approx half the computations, for sentences where we have to fill the blank with all vocabulary words.
+As this process is needed for WSD, I save a matrix with all sentences-with-blank vs vocabulary scores, which can be reused for word-category formation without the need to reevaluate anything in BERT.
+
+Now, the remaining evaluations c), d) and h), when evaluating fill-the-blank sentences, won't be very repeatable. E.g., for h) we will be evaluating things like
+
+h) P(M1 = Not           |M1 dog real sentence)
+
+or
+
+h) P(M1 = Not           |M1 quickly real sentence)
+
+which I don't feel it's even worth storing in a trie. Or is it?
+
+I guess storing them may potentially be useful for random generated sentences.
+@ben this is what you have in mind to store in the trie, right? 
+Not only a given sentence probability as P(Not a real sentence).
+
+******************
+On the results of the first test, there was a memory error when clustering.
+Checking what went wrong, there shouldn't be a memory error with the
+smallWSD corpus.
+
+***********
+Added tokenizer-only class, to be used in wordsenser.
+
+******************
+## 20 Mar, 2020
+
+Slack exchange. Ben says:
+
+500 million sequences would be nice, figuring average sequence length of 20
+
+This is a rough estimate based on 40GB text file training data for GPT2, figuring 200M words or so per GB of text-file
+
+************
+My reply:
+
+@ben for a GPT2-sized training corpus, you're right that there
+will be around 500M sentences (or word sequences), but to estimate the
+probability of a sentence of length N, we need 2*N - 1 BERT predictions.
+ 
+For WSD and word-category formation, we then need to replace one word 
+of the sentence with a different one (fill in the blank). We can
+reuse half of those predictions, but still need to calculate around N of 
+them for each word in the vocabulary of interest for the task.
+Then, we replace the next word in the sentence with a blank and fill it
+with all words in the vocabulary of interest. 
+Again, we can reuse about half of the predictions, but still need to 
+calculate some new ones.
+And so on for each position in the sentence.
+
+Now, for grammar induction, many of the produced sentences are going to
+be ungrammatical, so probably not pre-stored in the trie from the sequences
+calculated in previous steps; meaning we also need to ask BERT for around
+N new predictions for them.
+
+So, I think if we were to use such large corpora, we would need way more
+than 500M stored values.
+Of course, we are probably going to use smaller corpora, and storing them
+on the fly as we calculate them (if not in the trie already) makes sense.
+
+@andre, it may also be relevant that the data that will be stored in the 
+trie are arrays with one floating point value per vocabulary word (in the 
+case of BERT's large model, that's around 30k values in every BERT 
+prediction).
+
+**************
+

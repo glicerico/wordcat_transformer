@@ -171,7 +171,8 @@ class WordCategorizer:
         # Following substitution handles removing sub-words, as well as inserting them
         word_tokens = self.Bert_Model.tokenizer.tokenize(word)
         replaced_sent = tokenized_sent[:word_init[repl_pos]] + word_tokens + tokenized_sent[word_init[repl_pos + 1]:]
-        curr_prob = self.Bert_Model.get_sentence_prob_normalized(replaced_sent, verbose=verbose)
+        score = self.get_sentence_prob_directional(replaced_sent, verbose=verbose)
+        curr_prob = self.Bert_Model.normalize_score(len(replaced_sent), score)
 
         # Determine which word-sense vector gets the calculated prob
         sense_centroids = self.senses.get(word, [0])  # If word not in ambiguous dict, return 1-item list
@@ -303,12 +304,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
-    no_eval = False  # Flag to trigger evaluation
 
     if args.pickle_vocab:
         print(f"Using pickle vocabulary file to categorize")
         wc.load_vocabulary(vocab_pickle=args.pickle_vocab)
-        no_eval = True
     elif args.vocab:
         print("Using annotated vocabulary file to categorize")
         wc.load_vocabulary(vocab_txt=args.vocab)

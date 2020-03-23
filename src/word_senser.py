@@ -5,7 +5,6 @@
 
 import os
 import pickle
-import torch
 import argparse
 import numpy as np
 import random as rand
@@ -14,9 +13,12 @@ from sklearn.cluster import KMeans, OPTICS, DBSCAN
 from tqdm import tqdm
 import warnings
 
-from BertModel import BERT
+from transformers import BertTokenizer
+from BertModel import BertLM, BertTok
 
 warnings.filterwarnings('ignore')
+
+MASK = '[MASK]'
 
 
 class WordSenseModel:
@@ -24,71 +26,60 @@ class WordSenseModel:
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
-        self.embeddings = []  # Embeddings for all words in corpus
-
+        self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
+        self.pretrained_model = pretrained_model
         self.device_number = device_number
         self.use_cuda = use_cuda
 
-        self.Bert_Model = BERT(pretrained_model, device_number, use_cuda)
+        self.lang_mod = None
 
     def apply_bert_tokenizer(self, word):
-        return self.Bert_Model.tokenizer.tokenize(word)
+        return self.lang_mod.tokenizer.tokenize(word)
 
-    def get_bert_embeddings(self, tokens):
-        _ib = self.Bert_Model.tokenizer.convert_tokens_to_ids(tokens)
-        _st = [0] * len(_ib)
-        if self.use_cuda:
-            _t1, _t2 = torch.tensor([_ib]).to(self.device_number), torch.tensor([_st]).to(self.device_number)
-        else:
-            _t1, _t2 = torch.tensor([_ib]), torch.tensor([_st])
-
-        with torch.no_grad():
-            _, _, _encoded_layers = self.Bert_Model.model(_t1, token_type_ids=_t2)
-            # Average last 4 hidden layers (second best result from Devlin et al. 2019)
-            _e1 = _encoded_layers[-4:]
-            _e2 = torch.cat((_e1[0], _e1[1], _e1[2], _e1[3]), 0)
-            _e3 = torch.mean(_e2, dim=0)
-            if self.use_cuda:
-                _final_layer = _e3.cpu().numpy()
-            else:
-                _final_layer = _e3.numpy()
-
-        return _final_layer
-
-    def load_embeddings(self, pickle_filename, corpus_file, func_frac):
+    def load_matrix(self, pickle_filename, corpus_file, func_frac, verbose=False, norm_pickle=None, norm_file=None):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
           a) Stores sentences as an array.
           b) Creates dictionary where each vocabulary word is mapped to its occurrences in corpus.
-          c) Calculates embeddings for each vocabulary word.
+          c) Calculates instance-word matrix, for instances and vocab words in corpus.
         :param pickle_filename
         :param corpus_file
+        :param func_frac:       Fraction of words that are considered functional words (ignored for disamb)
         """
         try:
             with open(pickle_filename, 'rb') as h:
                 _data = pickle.load(h)
                 self.sentences = _data[0]
                 self.vocab_map = _data[1]
-                self.embeddings = _data[2]
+                self.matrix = _data[2]
 
-                print("EMBEDDINGS FOUND!")
+                print("MATRIX FOUND!")
+
+            # Load tokenizer, needed by export_clusters method
+            self.lang_mod = BertTok(self.pretrained_model)
 
         except:
-            print("Embedding File Not Found!! \n")
+            print("MATRIX File Not Found!! \n")
+
+            print("Loading Bert MLM...")
+            self.lang_mod = BertLM(self.pretrained_model, self.device_number, self.use_cuda)
+
+            # Calculate normalization scores if option is present
+            self.lang_mod.load_norm_scores(norm_pickle, norm_file)
 
             print("Loading vocabulary")
-            self.get_vocabulary(corpus_file)
+            self.get_vocabulary(corpus_file, verbose=verbose)
             with open(pickle_filename[:-6] + 'vocab', 'wb') as v:
                 pickle.dump(list(self.vocab_map.keys()), v)
 
+            print("Calculate matrix...")
+            self.calculate_matrix(verbose=verbose)
             print(f"Removing the top {func_frac} fraction of words")
             self.remove_function_words(func_frac)
-            print("Calculate embeddings...")
-            self.calculate_embeddings()
 
             with open(pickle_filename, 'wb') as h:
-                _data = (self.sentences, self.vocab_map, self.embeddings)
+                _data = (self.sentences, self.vocab_map, self.matrix)
                 pickle.dump(_data, h)
 
             print("Data stored in " + pickle_filename)
@@ -99,7 +90,7 @@ class WordSenseModel:
         :param tokenized_sent:
         :return:
         """
-        sentence = self.Bert_Model.tokenizer.convert_tokens_to_string(tokenized_sent[1:-1])  # Ignore boundary tokens
+        sentence = self.lang_mod.tokenizer.convert_tokens_to_string(tokenized_sent[1:-1])  # Ignore boundary tokens
         return sentence.split()
 
     def remove_function_words(self, functional_threshold):
@@ -112,53 +103,178 @@ class WordSenseModel:
         nbr_delete = int(len(sorted_vocab) * functional_threshold)  # Nbr of words to delete
         self.vocab_map = dict(sorted_vocab[:-nbr_delete])  # Delete most common words
 
-    def get_vocabulary(self, corpus_file):
+    def get_vocabulary(self, corpus_file, verbose=False):
         """
         Reads all word instances in file, stores their location
         :param corpus_file:     file to get vocabulary
         """
         with open(corpus_file, 'r') as fi:
+            instance_nbr = 0
             # Process each sentence in corpus
             for sent_nbr, sent in tqdm(enumerate(fi)):
-                bert_tokens = self.Bert_Model.tokenize_sent(sent)
+                bert_tokens = self.lang_mod.tokenize_sent(sent)
                 self.sentences.append(bert_tokens)
                 words = self.get_words(bert_tokens)
                 # Store word instances in vocab_map
                 for word_pos, word in enumerate(words):
-                    if word not in self.vocab_map.keys():
+                    if word not in self.vocab_map:
                         self.vocab_map[word] = []
-                    self.vocab_map[word].append((sent_nbr, word_pos))  # Register instance location
+                    # TODO: Can avoid storing coordinates if not CAPS target word in export_clusters
+                    self.vocab_map[word].append((sent_nbr, word_pos, instance_nbr))  # Register instance location
+                    instance_nbr += 1
+        if verbose:
+            print("Vocabulary:")
+            print(self.vocab_map)
 
-    def calculate_embeddings(self):
+    def calculate_matrix(self, verbose=False):
         """
         Calculates embeddings for all word instances in corpus_file
         """
-        stored_embeddings = 0
-
+        instances = {}  # Stores matrix indexes for each instance embedding
+        embeddings_count = 0  # Counts embeddings created (matrix row nbr)
         # Process each sentence in corpus
-        for bert_tokens in self.sentences:
-            sent_embeddings = []  # Store one sentence's word embeddings as elements
+        for bert_tokens in tqdm(self.sentences):
+            print(f"Processing sentence: {bert_tokens}")
             words = self.get_words(bert_tokens)
-            final_layer = self.get_bert_embeddings(bert_tokens)
+            word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
-            token_count = 1  # Start from 1: ignore '[CLS]' embedding
-            # Process all words in sentence
+            # Replace all words in sentence to get their instance-embeddings
             for word_pos, word in enumerate(words):
-                word_len = len(self.apply_bert_tokenizer(word))  # Handle subwords
+                if word not in instances:
+                    instances[word] = []
+                instances[word].append(embeddings_count)
+                embeddings_count += 1
+                embedding = []  # Store one word instance (sentence with blank) embedding
 
-                if word in self.vocab_map.keys():  # Store embeddings for vocab words
-                    embedding = np.mean(final_layer[token_count:token_count + word_len], 0)
-                    sent_embeddings.append(np.float32(embedding))  # Lower precision to save mem, speed
-                    stored_embeddings += 1
-                else:  # If word not in vocab of interest, just use placeholder
-                    sent_embeddings.append(0)
+                # Calculate common part of sentence probability steps for all words to fill
+                # Will only be used when replacement word is composed of one token, otherwise, we need to do the
+                # whole calculation
+                left_sent = bert_tokens[:word_starts[word_pos + 1]]
+                right_sent = bert_tokens[word_starts[word_pos + 2]:]
+                common_probs = self.get_common_probs(left_sent, right_sent, verbose=verbose)
 
-                token_count += word_len
+                # Calculate sentence's probabilities with different filling words: embedding
+                for repl_word in self.vocab_map.keys():
+                    word_tokens = self.lang_mod.tokenizer.tokenize(repl_word)
+                    if len(word_tokens) > 1:  # Ignore common probs; do whole calculation
+                        replaced_sent = left_sent + word_tokens + right_sent
+                        score = self.lang_mod.get_sentence_prob_directional(replaced_sent, verbose=verbose)
+                        sent_len = len(replaced_sent)
+                    else:
+                        score = self.complete_probs(common_probs, left_sent, right_sent, repl_word)
+                        sent_len = len(left_sent) + len(right_sent) + 1
 
-            # Store this sentence embeddings in the general list
-            self.embeddings.append(sent_embeddings)
+                    curr_prob = self.lang_mod.normalize_score(sent_len, score)
+                    embedding.append(curr_prob)
 
-        print(f"{stored_embeddings} EMBEDDINGS STORED")
+                # Store this sentence embeddings in the general list
+                self.matrix.append(np.float32(embedding))  # Lower precision to save mem, speed
+
+    def complete_probs(self, common_probs, left_sent, right_sent, word_token, verbose=False):
+        """
+        Given the common probability calculations for a sentence, complete calculations filling blank with word_tokens
+        """
+        preds_blank_left, preds_blank_right, log_sent_prob_forw, log_sent_prob_back = common_probs
+        temp_left = left_sent[:]
+        temp_right = right_sent[:]
+
+        # Get probabilities for word filling the blank: b) and g)
+        log_sent_prob_forw += self.get_log_prob(preds_blank_left, word_token, len(left_sent), verbose=verbose)
+        log_sent_prob_back += self.get_log_prob(preds_blank_right, word_token, len(left_sent), verbose=verbose)
+
+        # Get remaining probs with blank filled: c), d), and h)
+        for i in range(1, len(right_sent)):  # d), c)
+            temp_right[-1 - i] = MASK
+            repl_sent = left_sent + [word_token] + temp_right
+            predictions = self.lang_mod.get_predictions(repl_sent)
+            log_sent_prob_forw += self.get_log_prob(predictions, right_sent[-1 - i], -1 - i, verbose=verbose)
+        for j in range(len(left_sent) - 1):  # h)
+            temp_left[1 + j] = MASK
+            repl_sent = temp_left + [word_token] + right_sent
+            predictions = self.lang_mod.get_predictions(repl_sent)
+            log_sent_prob_back += self.get_log_prob(predictions, left_sent[1 + j], 1 + j, verbose=verbose)
+
+        # Obtain geometric average of forward and backward probs
+        log_geom_mean_sent_prob = 0.5 * (log_sent_prob_forw + log_sent_prob_back)
+        if verbose:
+            print(f"Raw forward sentence probability: {log_sent_prob_forw}")
+            print(f"Raw backward sentence probability: {log_sent_prob_back}\n")
+            print(f"Average normalized sentence prob: {log_geom_mean_sent_prob}\n")
+
+        return np.power(10, log_geom_mean_sent_prob)
+
+    def get_log_prob(self, predictions, token, position, verbose=False):
+        """
+        Given BERT's predictions, return probability for required token, in required position
+        """
+        probs_first = self.lang_mod.sm(predictions[0, position])  # Softmax to get probabilities for first (sub)word
+        if verbose:
+            self.lang_mod.print_top_predictions(probs_first)
+        log_prob_first = probs_first[self.lang_mod.tokenizer.convert_tokens_to_ids(token)]
+
+        return np.log10(log_prob_first.detach().numpy())
+
+    def get_common_probs(self, left_sent, right_sent, verbose=False):
+        """
+        Calculate partial forward and backwards probabilities of sentence probability estimation, for
+        the sections that are common to all iterations of a fill-in-the-blank process.
+        Example sentence: "Not ___ real sentence". We need probabilities:
+        FORWARD:
+        a) P(M1 = Not           |M1 M2 M3 M4)
+        b) P(M2 = ___           |Not M2 M3 M4)
+        c) P(M3 = real          |Not ___ M3 M4)
+        d) P(M4 = sentence      |Not ___ real M4)
+        BACKWARD:
+        e) P(M4 = sentence      |M1 M2 M3 M4)
+        f) P(M3 = real          |M1 M2 M3 sentence)
+        g) P(M2 = ___           |M1 M2 real sentence)
+        h) P(M1 = Not           |M1 ___ real sentence)
+        :param left_sent:   Tokens before the blank
+        :param right_sent:  Tokens after the blank
+        :param verbose:
+        :return:            log10(a)) as log_common_prob_forw,
+                            log10(e) * f)) as log_common_prob_back,
+                            The whole vocabulary prediction array for both b) and g), to be used later by all
+                            words filling the blank.
+        """
+        masks_left = ['[CLS]'] + [MASK] * (len(left_sent) - 1)
+        masks_right = [MASK] * (len(right_sent) - 1) + ['[SEP]']
+        temp_left = left_sent[:]
+        temp_right = right_sent[:]
+        log_common_prob_forw = 0
+        log_common_prob_back = 0
+
+        # Estimate a) and e) if they are not the position of the blank
+        repl_sent = masks_left + [MASK] + masks_right  # Fully masked sentence
+        predictions = self.lang_mod.get_predictions(repl_sent)
+        if len(left_sent) > 1:
+            log_common_prob_forw += self.get_log_prob(predictions, left_sent[1], 1, verbose=verbose)
+        if len(right_sent) > 1:
+            log_common_prob_back += self.get_log_prob(predictions, right_sent[-2], len(repl_sent) - 2, verbose=verbose)
+
+        # Get all predictions for b)
+        repl_sent = left_sent + [MASK] + masks_right
+        preds_blank_left = self.lang_mod.get_predictions(repl_sent)
+
+        # Get all predictions for g)
+        repl_sent = masks_left + [MASK] + right_sent
+        preds_blank_right = self.lang_mod.get_predictions(repl_sent)
+
+        # Estimate common probs for forward sentence probability
+        for i in range(1, len(left_sent) - 1):  # Skip [CLS] token
+            temp_left[-i] = MASK
+            repl_sent = temp_left + [MASK] + masks_right
+            predictions = self.lang_mod.get_predictions(repl_sent)
+            log_common_prob_forw += self.get_log_prob(predictions, left_sent[-i], len(left_sent) - i, verbose=verbose)
+
+        # Estimate common probs for backwards sentence probability (f in the example)
+        for j in range(len(right_sent) - 2):
+            temp_right[j] = MASK
+            repl_sent = masks_left + [MASK] + temp_right
+            predictions = self.lang_mod.get_predictions(repl_sent)
+            log_common_prob_back += self.get_log_prob(predictions, right_sent[j], len(left_sent) + 1 + j, verbose=verbose)
+
+        return preds_blank_left, preds_blank_right, log_common_prob_forw, log_common_prob_back
 
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """
@@ -199,9 +315,9 @@ class WordSenseModel:
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
-            curr_embeddings = [self.embeddings[x][y] for x, y in instances]
+            curr_embeddings = [self.matrix[row] for _, _, row in instances]
 
-            if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is uncommon
+            if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Word \"{word}\" frequency lower than threshold")
                 continue
 
@@ -221,7 +337,7 @@ class WordSenseModel:
 
     def export_clusters(self, fl, save_dir, word, labels):
         """
-        Write clustering results to file
+        Write clustering results to files
         :param fl:              handle for logging file
         :param save_dir:        Directory to save disambiguated senses
         :param word:            Current word to disambiguate
@@ -239,20 +355,20 @@ class WordSenseModel:
                 fo.write(f"Cluster #{i}")
                 if len(sense_members) > 0:  # Handle empty clusters
                     fo.write(": \n[")
-                    np.savetxt(fo, sense_members, fmt="(%s, %s)", newline=", ")
+                    np.savetxt(fo, sense_members, fmt="(%s, %s, %s)", newline=", ")
                     fo.write(']\n')
                     # Write at most 3 sentence examples for the word sense
                     sent_samples = rand.sample(sense_members, min(len(sense_members), 3))
                     fo.write('Samples:\n')
                     # Write sample sentences to file, with focus word in CAPS for easier reading
-                    for sample, focus_word in sent_samples:
+                    for sample, focus_word, _ in sent_samples:
                         bold_sent = self.get_words(self.sentences[sample])
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
 
                     # Calculate cluster centroid and save
                     if i >= 0:  # Don't calculate centroid for unclustered (noise) instances
-                        sense_embeddings = [self.embeddings[x][y] for x, y in sense_members]
+                        sense_embeddings = [self.matrix[row] for _, _, row in sense_members]
                         sense_centroids.append(np.mean(sense_embeddings, 0))
                 else:
                     fo.write(" is empty\n\n")
@@ -276,8 +392,11 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--clustering', type=str, default='OPTICS', help='Clustering method to use')
     parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
+    parser.add_argument('--verbose', action='store_true', help='Print processing details')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
-                                                                               'Embeddings to file')
+                                                                              'Embeddings to file')
+    parser.add_argument('--norm_file', type=str, default='', help='Sentences file to use for normalization')
+    parser.add_argument('--norm_pickle', type=str, default='test.pickle', help='Pickle file to use for normalization')
 
     args = parser.parse_args()
 
@@ -289,11 +408,11 @@ if __name__ == '__main__':
     else:
         print("Processing without CUDA!")
 
-    print("Loading WSD Model!")
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_embeddings(args.pickle_emb, args.corpus, args.func_frac)
+    WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac, verbose=args.verbose, norm_pickle=args.norm_pickle,
+                    norm_file=args.norm_file)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
@@ -302,4 +421,3 @@ if __name__ == '__main__':
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")
-
