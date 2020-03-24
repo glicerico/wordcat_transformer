@@ -212,7 +212,7 @@ class WordSenseModel:
             self.lang_mod.print_top_predictions(probs_first)
         log_prob_first = probs_first[self.lang_mod.tokenizer.convert_tokens_to_ids(token)]
 
-        return np.log10(log_prob_first.detach().numpy())
+        return np.log10(log_prob_first.detach().cpu().numpy())
 
     def get_common_probs(self, left_sent, right_sent, verbose=False):
         """
