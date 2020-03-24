@@ -70,7 +70,7 @@ class BertLM:
         :param k:       Number of top predictions to print
         :return:        Nothing, only prints info
         """
-        probs = probs.detach().numpy()
+        probs = probs.detach().cpu().numpy()
         top_indexes = np.argpartition(probs, -k)[-k:]
         sorted_indexes = top_indexes[np.argsort(-probs[top_indexes])]
         top_tokens = self.tokenizer.convert_ids_to_tokens(sorted_indexes)
@@ -176,9 +176,9 @@ class BertLM:
             probs_forward = self.get_directional_prob(tokenized_input, i, 'forward', verbose=verbose)
             probs_backwards = self.get_directional_prob(tokenized_input, i, 'backwards', verbose=verbose)
             log_prob_forward = probs_forward[ids_input[i]]  # Prediction for masked word
-            log_prob_forward = np.log10(log_prob_forward.detach().numpy())
+            log_prob_forward = np.log10(log_prob_forward.detach().cpu().numpy())
             log_prob_backwards = probs_backwards[ids_input[i]]  # Prediction for masked word
-            log_prob_backwards = np.log10(log_prob_backwards.detach().numpy())
+            log_prob_backwards = np.log10(log_prob_backwards.detach().cpu().numpy())
             log_sent_prob_forward += log_prob_forward
             log_sent_prob_backwards += log_prob_backwards
 
@@ -271,7 +271,7 @@ class BertLM:
             current_probs = self.sm(predictions[0, i])  # Softmax to get probabilities
             current_prob = current_probs[ids_input[i]]  # Prediction for masked word
 
-            sum_lp += np.log(current_prob.detach().numpy())
+            sum_lp += np.log(current_prob.detach().cpu().numpy())
 
             if verbose:
                 print(current_tokenized)
