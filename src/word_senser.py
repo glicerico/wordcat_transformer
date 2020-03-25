@@ -10,6 +10,7 @@ import numpy as np
 import random as rand
 
 from sklearn.cluster import KMeans, OPTICS, DBSCAN
+from sklearn.preprocessing import normalize
 from tqdm import tqdm
 import warnings
 
@@ -316,6 +317,7 @@ class WordSenseModel:
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
+            curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
 
             if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Word \"{word}\" frequency lower than threshold")
