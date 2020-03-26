@@ -886,9 +886,11 @@ However, this may be a false hope.
 
 I want to build a corpus which, even with only a couple ambiguous words, I can
 clearly distinguish them and cluster them correctly.
+UPDATE: Created a [corpus](../sentences/fat_saw_corpus.txt) with two clearly
+ambiguous words: "fat" (noun and adj) and "saw" (verb and noun).
+Will run it through WSD.
 
 Rethinking about sentence-length normalization... I wonder if it makes any
 sense in the WSD context.
 If I am going to normalize to unit length vector later, perhaps I can ignore it.
-
-
+Trying that in Sergey's cluster to compare results.
