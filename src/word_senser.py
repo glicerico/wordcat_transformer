@@ -439,7 +439,7 @@ if __name__ == '__main__':
     WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
 
     print("Obtaining word embeddings...")
-    WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac, verbose=args.verbose, norm_pickle=args.norm_pickle,
+    WSD.load_matrix(args.pickle_emb, args.corpus, verbose=args.verbose, norm_pickle=args.norm_pickle,
                     norm_file=args.norm_file)
 
     # Remove top words from disambiguation
