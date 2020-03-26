@@ -833,3 +833,62 @@ First is word sense disambiguation (WSD), where we build word-instance vectors w
 Second part is grammar induction, where we randomly generate sentences that follow a given explicit grammar and compare their probability against sentences generated from a distortion of that grammar. This way, we evaluate if a grammar is close to the grammar implicit in BERT, and it's an iterative process to approximate the grammar in BERT.
 
 We submitted a paper explaining with more detail, let me know if that would be useful.
+
+****************
+## Mar 26, 2020
+
+WSD results from the oracle approach are not as good as they were before,
+using final layer embeddings.
+I've been trying to find out the reason for that.
+
+Current normalization using sentence length shows high variation:
+Grammatical sentences with the same length can have large sentence
+probability differences, according to the training data for BERT.
+E.g.
+```
+Processing sentence: ['[CLS]', 'the', 'fat', 'cat', 'ate', 'the', 'last', 'mouse', 'quickly', '.', '[SEP]']
+1.5699080230392615e-23
+
+Processing sentence: ['[CLS]', 'there', 'are', 'many', 'health', 'risks', 'associated', 'with', 'fat', '.', '[SEP]']
+8.689618845171052e-20
+
+Processing sentence: ['[CLS]', 'they', 'will', 'fly', 'out', 'of', 'santiago', 'tomorrow', 'morning', '.', '[SEP]']
+3.506387431159266e-22
+
+Processing sentence: ['[CLS]', 'she', 'bought', 'the', 'last', 'microsoft', 'mouse', 'for', 'santiago', '.', '[SEP]']
+2.933483879831623e-28
+```
+
+For WSD, all fill-the-blank sentences share context and so the
+features should be comparable to each other.
+For comparison to other word-instances in different sentences, however, we
+need to normalize each word-instance embedding to unit length, so that the
+pair-wise distances are not dominated by a sentence which has an inherently 
+larger probability.
+
+Implemented normalization.
+
+Still, the clusters are not good.
+To help exploration, I implemented a visualizer for the word-instance
+embeddings.
+It shows projections of the embeddings using the two main PCA components, and
+also the t-SNE algorithm.
+The K-Means obtained clusters correspond fine with the PCA projections, but not
+as well for the t-SNE projections.
+However, the t-SNE projections also don's show a correct division of word
+senses as we would expect them.
+
+Going through some of the clearer polysemous word examples like "fat" and "fly",
+I notice that indeed the [smallWSD corpus](../sentences/smallWSD_corpus.txt)
+doesn't provide a good context for disambiguation.
+The hope is that a more extended corpus will work better for this.
+However, this may be a false hope.
+
+I want to build a corpus which, even with only a couple ambiguous words, I can
+clearly distinguish them and cluster them correctly.
+
+Rethinking about sentence-length normalization... I wonder if it makes any
+sense in the WSD context.
+If I am going to normalize to unit length vector later, perhaps I can ignore it.
+
+
