@@ -40,7 +40,7 @@ class WordSenseModel:
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
 
-    def load_matrix(self, pickle_filename, corpus_file, func_frac, verbose=False, norm_pickle=None, norm_file=None):
+    def load_matrix(self, pickle_filename, corpus_file, verbose=False, norm_pickle=None, norm_file=None):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
@@ -49,7 +49,6 @@ class WordSenseModel:
           c) Calculates instance-word matrix, for instances and vocab words in corpus.
         :param pickle_filename
         :param corpus_file
-        :param func_frac:       Fraction of words that are considered functional words (ignored for disamb)
         """
         try:
             with open(pickle_filename, 'rb') as h:
@@ -79,8 +78,6 @@ class WordSenseModel:
 
             print("Calculate matrix...")
             self.calculate_matrix(verbose=verbose)
-            print(f"Removing the top {func_frac} fraction of words")
-            self.remove_function_words(func_frac)
 
             with open(pickle_filename, 'wb') as h:
                 _data = (self.sentences, self.vocab_map, self.matrix)
@@ -443,6 +440,10 @@ if __name__ == '__main__':
     print("Obtaining word embeddings...")
     WSD.load_matrix(args.pickle_emb, args.corpus, args.func_frac, verbose=args.verbose, norm_pickle=args.norm_pickle,
                     norm_file=args.norm_file)
+
+    # Remove top words from disambiguation
+    print(f"Removing the top {args.func_frac} fraction of words")
+    WSD.remove_function_words(args.func_frac)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
