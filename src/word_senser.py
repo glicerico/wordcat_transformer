@@ -102,7 +102,8 @@ class WordSenseModel:
         """
         sorted_vocab = sorted(self.vocab_map.items(), key=lambda kv: len(kv[1]))  # Sort words by frequency
         nbr_delete = int(len(sorted_vocab) * functional_threshold)  # Nbr of words to delete
-        self.vocab_map = dict(sorted_vocab[:-nbr_delete])  # Delete most common words
+        if nbr_delete > 0:  # Prevent deleting all words if nbr_delete is zero
+            self.vocab_map = dict(sorted_vocab[:-nbr_delete])  # Delete most common words
 
     def get_vocabulary(self, corpus_file, verbose=False):
         """
