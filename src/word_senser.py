@@ -10,6 +10,10 @@ import numpy as np
 import random as rand
 
 from sklearn.cluster import KMeans, OPTICS, DBSCAN
+from sklearn.preprocessing import normalize
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 import warnings
 
@@ -276,6 +280,28 @@ class WordSenseModel:
 
         return preds_blank_left, preds_blank_right, log_common_prob_forw, log_common_prob_back
 
+    def plot_instances(self, embeddings, labels, word):
+        # PCA processing
+        comps_PCA = min(3, len(embeddings))
+        pca = PCA(n_components=comps_PCA)
+        pca_result = pca.fit_transform(embeddings)
+        print('Explained variation per principal component: {}'.format(pca.explained_variance_ratio_))
+
+        # t-SNE processing
+        tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=300)
+        tsne_results = tsne.fit_transform(embeddings)
+
+        # PLOTTING
+        plt.figure()
+        plt.subplot(211)
+        plt.scatter(pca_result[:, 0], pca_result[:, 1], c=labels)
+        plt.title(word)
+
+        plt.subplot(212)
+        plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=labels)
+        plt.show()
+        print("PLOTTED")
+
     def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
         """
         Disambiguate word senses through clustering their transformer embeddings.
@@ -316,6 +342,7 @@ class WordSenseModel:
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
+            curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
 
             if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Word \"{word}\" frequency lower than threshold")
@@ -323,6 +350,9 @@ class WordSenseModel:
 
             print(f'Disambiguating word \"{word}\"...')
             estimator.fit(curr_embeddings)  # Disambiguate
+            if True:
+                self.plot_instances(curr_embeddings, estimator.labels_, word)
+
             curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
             if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
                 self.cluster_centroids[word] = curr_centroids
