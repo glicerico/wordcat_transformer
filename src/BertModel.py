@@ -170,26 +170,27 @@ class BertLM:
             print(f"Processing sentence: {tokenized_input}")
 
         log_sent_prob_forward = 0
-        log_sent_prob_backwards = 0
+        # log_sent_prob_backwards = 0
         # Mask non-special tokens in forward and backwards directions; calculate their probabilities
         for i in range(1, len(tokenized_input) - 1):  # Don't loop first and last tokens
             probs_forward = self.get_directional_prob(tokenized_input, i, 'forward', verbose=verbose)
-            probs_backwards = self.get_directional_prob(tokenized_input, i, 'backwards', verbose=verbose)
+            # probs_backwards = self.get_directional_prob(tokenized_input, i, 'backwards', verbose=verbose)
             log_prob_forward = probs_forward[ids_input[i]]  # Prediction for masked word
             log_prob_forward = np.log10(log_prob_forward.detach().cpu().numpy())
-            log_prob_backwards = probs_backwards[ids_input[i]]  # Prediction for masked word
-            log_prob_backwards = np.log10(log_prob_backwards.detach().cpu().numpy())
+            # log_prob_backwards = probs_backwards[ids_input[i]]  # Prediction for masked word
+            # log_prob_backwards = np.log10(log_prob_backwards.detach().cpu().numpy())
             log_sent_prob_forward += log_prob_forward
-            log_sent_prob_backwards += log_prob_backwards
+            # log_sent_prob_backwards += log_prob_backwards
 
-            if verbose:
-                print(f"Word: {tokenized_input[i]} \t Log-Prob_forward: {log_prob_forward}; Log-Prob_backwards: {log_prob_backwards}")
+            # if verbose:
+                # print(f"Word: {tokenized_input[i]} \t Log-Prob_forward: {log_prob_forward}; Log-Prob_backwards: {log_prob_backwards}")
 
         # Obtain geometric average of forward and backward probs
-        log_geom_mean_sent_prob = 0.5 * (log_sent_prob_forward + log_sent_prob_backwards)
+        # log_geom_mean_sent_prob = 0.5 * (log_sent_prob_forward + log_sent_prob_backwards)
+        log_geom_mean_sent_prob = log_sent_prob_forward
         if verbose:
             print(f"Raw forward sentence probability: {log_sent_prob_forward}")
-            print(f"Raw backward sentence probability: {log_sent_prob_backwards}\n")
+            # print(f"Raw backward sentence probability: {log_sent_prob_backwards}\n")
             print(f"Average normalized sentence prob: {log_geom_mean_sent_prob}\n")
 
         return np.power(10, log_geom_mean_sent_prob)

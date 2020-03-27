@@ -153,18 +153,19 @@ class WordSenseModel:
                 # whole calculation
                 left_sent = bert_tokens[:word_starts[word_pos + 1]]
                 right_sent = bert_tokens[word_starts[word_pos + 2]:]
-                common_probs = self.get_common_probs(left_sent, right_sent, verbose=verbose)
+                # common_probs = self.get_common_probs(left_sent, right_sent, verbose=verbose)
 
                 # Calculate sentence's probabilities with different filling words: embedding
                 for repl_word in self.vocab_map.keys():
                     word_tokens = self.lang_mod.tokenizer.tokenize(repl_word)
-                    if len(word_tokens) > 1:  # Ignore common probs; do whole calculation
+                    # if len(word_tokens) > 1:  # Ignore common probs; do whole calculation
+                    if True:  # Ignore common probs; do whole calculation
                         replaced_sent = left_sent + word_tokens + right_sent
                         score = self.lang_mod.get_sentence_prob_directional(replaced_sent, verbose=verbose)
                         sent_len = len(replaced_sent)
-                    else:
-                        score = self.complete_probs(common_probs, left_sent, right_sent, repl_word)
-                        sent_len = len(left_sent) + len(right_sent) + 1
+                    # else:
+                    #     score = self.complete_probs(common_probs, left_sent, right_sent, repl_word)
+                    #     sent_len = len(left_sent) + len(right_sent) + 1
 
                     curr_prob = self.lang_mod.normalize_score(sent_len, score)
                     embedding.append(curr_prob)
