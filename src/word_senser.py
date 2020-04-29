@@ -9,10 +9,11 @@ import argparse
 import numpy as np
 import random as rand
 
-from sklearn.cluster import KMeans, OPTICS, DBSCAN
+from sklearn.cluster import KMeans, DBSCAN #, OPTICS because we downgraded from sklearn 0.22 to 0.20 to get spherical Kmeans working
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from spherecluster import SphericalKMeans, VonMisesFisherMixture
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import warnings
@@ -327,8 +328,23 @@ class WordSenseModel:
             eps = kwargs.get('eps', 0.3)
             estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=eps)
             save_to = save_dir + "_DBSCAN_minsamp" + str(min_samples) + '_eps' + str(eps)
+        elif clust_method == 'SphericalKMeans':
+            k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
+            freq_threshold = max(freq_threshold, k)
+            estimator = SphericalKMeans(n_clusters=k, n_jobs=4)
+            save_to = save_dir + "_SphericalKMeans_k" + str(k)
+        elif clust_method == 'movMF-soft':
+            k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
+            freq_threshold = max(freq_threshold, k)
+            estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="soft")
+            save_to = save_dir + "_movMF-soft_k" + str(k)
+        elif clust_method == 'movMF-hard':
+            k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
+            freq_threshold = max(freq_threshold, k)
+            estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="hard")
+            save_to = save_dir + "_movMF-hard_k" + str(k)
         else:
-            print("Clustering methods implemented are: OPTICS, DBSCAN, KMeans")
+            print("Clustering methods implemented are: OPTICS, DBSCAN, KMeans, SphericalKMeans, movMF-soft, movMF-hard")
             exit(1)
 
         if not os.path.exists(save_to):
