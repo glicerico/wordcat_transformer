@@ -434,7 +434,7 @@ if __name__ == '__main__':
     parser.add_argument('--step_k', type=int, default=1, help='Increase in number of clusters to use')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
-    parser.add_argument('--clustering', type=str, default='OPTICS', help='Clustering method to use')
+    parser.add_argument('--clustering', type=str, default='SphericalKmeans', help='Clustering method to use')
     parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
