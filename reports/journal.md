@@ -894,3 +894,25 @@ Rethinking about sentence-length normalization... I wonder if it makes any
 sense in the WSD context.
 If I am going to normalize to unit length vector later, perhaps I can ignore it.
 Trying that in Sergey's cluster to compare results.
+
+****************
+## May 1, 2020: Fierce Mayday to you all!
+
+Coming back to this after some weeks focused in agent-based simulations.
+
+Updates which were not logged before:
+
+- The [fat_saw corpus](../sentences/fat_saw_corpus.txt) is processed okay with
+KMeans, not with the OPTICS/DBSCAN algos.
+- normalizing to unit-length seems to work fine. 
+Will use this instead of normalizing by sentence length.
+- Tried using BERT model only in forward mode, not backward.
+This gave results as good as using both ways... wonder if I could just get rid
+of backwards calculation.
+
+More recent developments...
+- Implemented spherical clustering methods from 
+[spherecluster](https://github.com/jasonlaska/spherecluster).
+All three tested methods (SphericalKMeans, 2 mixture of von Mises-Fisher
+ distributions) provide exactly the same results as KMeans, and match well with
+ PCA visualization of embeddings.
