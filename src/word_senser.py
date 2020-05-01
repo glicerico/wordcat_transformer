@@ -9,7 +9,7 @@ import argparse
 import numpy as np
 import random as rand
 
-from sklearn.cluster import KMeans, DBSCAN #, OPTICS because we downgraded from sklearn 0.22 to 0.20 to get spherical Kmeans working
+from sklearn.cluster import KMeans, DBSCAN, OPTICS
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import warnings
 
-from transformers import BertTokenizer
 from BertModel import BertLM, BertTok
 
 warnings.filterwarnings('ignore')
@@ -301,7 +300,8 @@ class WordSenseModel:
         plt.show()
         print("PLOTTED")
 
-    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle', **kwargs):
+    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle',
+                     plot=False, **kwargs):
         """
         Disambiguate word senses through clustering their transformer embeddings.
         Clustering is done using the selected sklearn algorithm.
@@ -310,6 +310,7 @@ class WordSenseModel:
         :param clust_method:    Clustering method used
         :param freq_threshold:  Frequency threshold for a word to be disambiguated
         :param pickle_cent:     Pickle file to store cluster centroids
+        :param plot:            Flag to plot 2D projection of word instance embeddings
         :param kwargs:          Clustering parameters
         """
         # Use OPTICS estimator also to get DBSCAN clusters
@@ -364,7 +365,7 @@ class WordSenseModel:
 
             print(f'Disambiguating word \"{word}\"...')
             estimator.fit(curr_embeddings)  # Disambiguate
-            if True:
+            if plot:
                 self.plot_instances(curr_embeddings, estimator.labels_, word)
 
             curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
@@ -437,6 +438,7 @@ if __name__ == '__main__':
     parser.add_argument('--clustering', type=str, default='SphericalKmeans', help='Clustering method to use')
     parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
+    parser.add_argument('--plot', action='store_true', help='Use GPU?')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
                                                                               'Embeddings to file')
     parser.add_argument('--norm_file', type=str, default='', help='Sentences file to use for normalization')
@@ -465,7 +467,7 @@ if __name__ == '__main__':
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
         WSD.disambiguate(args.save_to, clust_method=args.clustering, freq_threshold=args.threshold, k=nn,
-                         pickle_cent=args.pickle_cent)
+                         pickle_cent=args.pickle_cent, plot=args.plot)
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")
