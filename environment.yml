@@ -1,0 +1,10 @@
+name: wordcat_transformers
+dependencies:
+  - python=3.7
+  - numpy
+  - scipy
+  - matplotlib
+  - tqdm
+  - scikit-learn=0.22.*
+  - pip:
+      - spherecluster
