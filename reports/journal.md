@@ -912,7 +912,8 @@ of backwards calculation.
 
 More recent developments...
 - Implemented spherical clustering methods from 
-[spherecluster](https://github.com/jasonlaska/spherecluster).
+[spherecluster](https://github.com/jasonlaska/spherecluster); reported and fixed
+a bug in this repo.
 All three tested methods (SphericalKMeans, 2 mixture of von Mises-Fisher
  distributions) provide exactly the same results as KMeans, and match well with
  PCA visualization of embeddings.
