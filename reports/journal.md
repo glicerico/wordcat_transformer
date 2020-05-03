@@ -917,3 +917,11 @@ a bug in this repo.
 All three tested methods (SphericalKMeans, 2 mixture of von Mises-Fisher
  distributions) provide exactly the same results as KMeans, and match well with
  PCA visualization of embeddings.
+ 
+ ## May 2, 2020
+ Tried forward-only WSD with bot fat_saw corpus and smallWSD.
+ Using KMeans for comparison, fat_saw gives similar results as bidirectional
+ (forward and backwards) sentence probabilities.
+ Makes me think maybe can use this simplified calculation.
+ TODO: Implement forward-only as an option??
+

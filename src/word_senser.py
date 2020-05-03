@@ -26,7 +26,7 @@ MASK = '[MASK]'
 
 
 class WordSenseModel:
-    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
+    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, freq_threshold=5):
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
@@ -36,6 +36,9 @@ class WordSenseModel:
         self.use_cuda = use_cuda
 
         self.lang_mod = None
+        self.estimator = None  # Clustering object
+        self.save_dir = None  # Directory to save disambiguated senses
+        self.freq_threshold = freq_threshold
 
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
@@ -278,10 +281,18 @@ class WordSenseModel:
 
         return preds_blank_left, preds_blank_right, log_common_prob_forw, log_common_prob_back
 
-    def plot_instances(self, embeddings, labels, word):
+    @staticmethod
+    def plot_instances(embeddings, labels, word):
+        """
+        Plot word-instance embeddings
+        :param embeddings:
+        :param labels:
+        :param word:
+        :return:
+        """
         # PCA processing
-        comps_PCA = min(3, len(embeddings))
-        pca = PCA(n_components=comps_PCA)
+        comps_pca= min(3, len(embeddings))
+        pca = PCA(n_components=comps_pca)
         pca_result = pca.fit_transform(embeddings)
         print('Explained variation per principal component: {}'.format(pca.explained_variance_ratio_))
 
@@ -300,57 +311,52 @@ class WordSenseModel:
         plt.show()
         print("PLOTTED")
 
-    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle',
-                     plot=False, **kwargs):
-        """
-        Disambiguate word senses through clustering their transformer embeddings.
-        Clustering is done using the selected sklearn algorithm.
-        If OPTICS method is used, then DBSCAN clusters are also obtained
-        :param save_dir:        Directory to save disambiguated senses
-        :param clust_method:    Clustering method used
-        :param freq_threshold:  Frequency threshold for a word to be disambiguated
-        :param pickle_cent:     Pickle file to store cluster centroids
-        :param plot:            Flag to plot 2D projection of word instance embeddings
-        :param kwargs:          Clustering parameters
-        """
-        # Use OPTICS estimator also to get DBSCAN clusters
+    def init_estimator(self, save_to, clust_method='OPTICS', **kwargs):
         if clust_method == 'OPTICS':
-            min_samples = kwargs.get('min_samples', 1)
+            self.min_samples = kwargs.get('min_samples', 1)
             # Init clustering object
-            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4)
-            save_to = save_dir + "_OPTICS_minsamp" + str(min_samples)
+            self.estimator = OPTICS(min_samples=self.min_samples, metric='cosine', n_jobs=4)
+            self.save_dir = save_to + "_OPTICS_minsamp" + str(self.min_samples)
         elif clust_method == 'KMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
-            freq_threshold = max(freq_threshold, k)
-            estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
-            save_to = save_dir + "_KMeans_k" + str(k)
+            self.freq_threshold = max(self.freq_threshold, k)
+            self.estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
+            self.save_dir = save_to + "_KMeans_k" + str(k)
         elif clust_method == 'DBSCAN':
-            min_samples = kwargs.get('min_samples', 2)
+            self.min_samples = kwargs.get('min_samples', 2)
             eps = kwargs.get('eps', 0.3)
-            estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=eps)
-            save_to = save_dir + "_DBSCAN_minsamp" + str(min_samples) + '_eps' + str(eps)
+            self.estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=self.min_samples, eps=eps)
+            self.save_dir = save_to + "_DBSCAN_minsamp" + str(self.min_samples) + '_eps' + str(eps)
         elif clust_method == 'SphericalKMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
-            freq_threshold = max(freq_threshold, k)
-            estimator = SphericalKMeans(n_clusters=k, n_jobs=4)
-            save_to = save_dir + "_SphericalKMeans_k" + str(k)
+            self.freq_threshold = max(self.freq_threshold, k)
+            self.estimator = SphericalKMeans(n_clusters=k, n_jobs=4)
+            self.save_dir = save_to + "_SphericalKMeans_k" + str(k)
         elif clust_method == 'movMF-soft':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
-            freq_threshold = max(freq_threshold, k)
-            estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="soft")
-            save_to = save_dir + "_movMF-soft_k" + str(k)
+            self.freq_threshold = max(self.freq_threshold, k)
+            self.estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="soft")
+            self.save_dir = save_to + "_movMF-soft_k" + str(k)
         elif clust_method == 'movMF-hard':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
-            freq_threshold = max(freq_threshold, k)
-            estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="hard")
-            save_to = save_dir + "_movMF-hard_k" + str(k)
+            self.freq_threshold = max(self.freq_threshold, k)
+            self.estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="hard")
+            self.save_dir = save_to + "_movMF-hard_k" + str(k)
         else:
             print("Clustering methods implemented are: OPTICS, DBSCAN, KMeans, SphericalKMeans, movMF-soft, movMF-hard")
             exit(1)
 
-        if not os.path.exists(save_to):
-            os.makedirs(save_to)
-        fl = open(save_to + "/clustering.log", 'w')  # Logging file
+    def disambiguate(self, pickle_cent='test_cent.pickle', plot=False):
+        """
+        Disambiguate word senses through clustering their transformer embeddings.
+        Clustering is done using the selected sklearn algorithm.
+        If OPTICS method is used, then DBSCAN clusters are also obtained
+        :param pickle_cent:     Pickle file to store cluster centroids
+        :param plot:            Flag to plot 2D projection of word instance embeddings
+        """
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        fl = open(self.save_dir + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
 
         # Loop for each word in vocabulary
@@ -359,16 +365,16 @@ class WordSenseModel:
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
             curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
 
-            if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is infrequent
+            if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Word \"{word}\" frequency lower than threshold")
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
-            estimator.fit(curr_embeddings)  # Disambiguate
+            self.estimator.fit(curr_embeddings)  # Disambiguate
             if plot:
-                self.plot_instances(curr_embeddings, estimator.labels_, word)
+                self.plot_instances(curr_embeddings, self.estimator.labels_, word)
 
-            curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
+            curr_centroids = self.export_clusters(fl, word, self.estimator.labels_)
             if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
                 self.cluster_centroids[word] = curr_centroids
 
@@ -380,11 +386,10 @@ class WordSenseModel:
         fl.write("\n")
         fl.close()
 
-    def export_clusters(self, fl, save_dir, word, labels):
+    def export_clusters(self, fl, word, labels):
         """
         Write clustering results to files
         :param fl:              handle for logging file
-        :param save_dir:        Directory to save disambiguated senses
         :param word:            Current word to disambiguate
         :param labels:          Cluster labels for each word instance
         """
@@ -394,7 +399,7 @@ class WordSenseModel:
         fl.write(f"{word}\t\t{num_clusters}\n")
 
         # Write senses to file, with some sentence examples
-        with open(save_dir + '/' + word + ".disamb", "w") as fo:
+        with open(self.save_dir + '/' + word + ".disamb", "w") as fo:
             for i in range(-1, num_clusters):  # Also write unclustered words
                 sense_members = [self.vocab_map[word][j] for j, k in enumerate(labels) if k == i]
                 fo.write(f"Cluster #{i}")
@@ -454,7 +459,8 @@ if __name__ == '__main__':
     else:
         print("Processing without CUDA!")
 
-    WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
+    WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda,
+                         freq_threshold=args.threshold)
 
     print("Obtaining word embeddings...")
     WSD.load_matrix(args.pickle_emb, args.corpus, verbose=args.verbose, norm_pickle=args.norm_pickle,
@@ -466,8 +472,8 @@ if __name__ == '__main__':
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(args.save_to, clust_method=args.clustering, freq_threshold=args.threshold, k=nn,
-                         pickle_cent=args.pickle_cent, plot=args.plot)
+        WSD.init_estimator(args.save_to, clust_method=args.clustering, k=nn)
+        WSD.disambiguate(pickle_cent=args.pickle_cent, plot=args.plot)
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")
