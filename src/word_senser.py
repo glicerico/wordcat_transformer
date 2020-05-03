@@ -43,7 +43,7 @@ class WordSenseModel:
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
 
-    def load_matrix(self, pickle_filename, corpus_file, verbose=False, norm_pickle=None, norm_file=None):
+    def load_matrix(self, pickle_filename, corpus_file, verbose=False, norm_pickle=None, norm_file=''):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
@@ -71,7 +71,7 @@ class WordSenseModel:
             print("Loading Bert MLM...")
             self.lang_mod = BertLM(self.pretrained_model, self.device_number, self.use_cuda)
 
-            # Calculate normalization scores if option is present
+            # Calculate normalization scores
             self.lang_mod.load_norm_scores(norm_pickle, norm_file)
 
             print("Loading vocabulary")
