@@ -370,7 +370,8 @@ class WordSenseModel:
             curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
-                print(f"Word \"{word}\" frequency lower than threshold")
+                print(f"Won't cluster: word \"{word}\" frequency is lower than threshold")
+                self.num_senses.append(1)
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
