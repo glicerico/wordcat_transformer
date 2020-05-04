@@ -67,7 +67,7 @@ class WordCategorizer:
             self.build_disamb_vocab()
         else:
             print("Need vocabulary file in text or pickle format")
-            exit()
+            exit(1)
 
     def build_disamb_vocab(self):
         """
@@ -283,7 +283,7 @@ class WordCategorizer:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='WSD using Transformers')
+    parser = argparse.ArgumentParser(description='Word categorization using BERT')
     parser.add_argument('--sentences', type=str, required=True, help='Sentence Corpus')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--use_cuda', action='store_true', help='Use GPU?')
@@ -297,23 +297,12 @@ if __name__ == '__main__':
     parser.add_argument('--steps_k', type=int, default=1, help='Step for clustering param exploration')
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
-    parser.add_argument('--pickle_WSD', type=str, required=False, help='Pickle file w/sense centroids')
-    parser.add_argument('--pickle_vocab', type=str, required=False, help='Pickle file w/vocabulary')
+    parser.add_argument('--pickle_WSD', type=str, required=False, help='Pickle file WSD info')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file with embeddings/Save '
                                                                               'embeddings to file')
     args = parser.parse_args()
 
     wc = WordCategorizer(pretrained_model=args.pretrained, use_cuda=args.use_cuda, device_number=args.device)
-
-    if args.pickle_vocab:
-        print(f"Using pickle vocabulary file to categorize")
-        wc.load_vocabulary(vocab_pickle=args.pickle_vocab)
-    elif args.vocab:
-        print("Using annotated vocabulary file to categorize")
-        wc.load_vocabulary(vocab_txt=args.vocab)
-    else:
-        print("Vocabulary pickle or text file needed")
-        exit()
 
     if args.pickle_WSD:
         print("Word senses file found")

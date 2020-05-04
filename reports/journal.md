@@ -926,3 +926,8 @@ All three tested methods (SphericalKMeans, 2 mixture of von Mises-Fisher
  Makes me think maybe can use this simplified calculation.
  TODO: Implement forward-only as an option??
 
+## May 3, 2020
+Start integrating latest WSD method with word category formation.
+
+## May 4, 2020
+

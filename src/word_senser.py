@@ -78,8 +78,6 @@ class WordSenseModel:
 
             print("Loading vocabulary")
             self.get_vocabulary(corpus_file, verbose=verbose)
-            with open(pickle_filename[:-6] + 'vocab', 'wb') as v:
-                pickle.dump(list(self.vocab_map.keys()), v)
 
             print("Calculate matrix...")
             self.calculate_matrix(verbose=verbose)
