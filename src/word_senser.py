@@ -38,6 +38,7 @@ class WordSenseModel:
         self.lang_mod = None
         self.estimator = None  # Clustering object
         self.save_dir = None  # Directory to save disambiguated senses
+        self.num_senses = None  # Stores nbr of senses for each vocabulary word
         self.freq_threshold = freq_threshold
 
     def apply_bert_tokenizer(self, word):
@@ -349,14 +350,16 @@ class WordSenseModel:
     def disambiguate(self, plot=False):
         """
         Disambiguate word senses through clustering their transformer embeddings.
-        Clustering is done using the selected sklearn algorithm.
-        If OPTICS method is used, then DBSCAN clusters are also obtained
+        Clustering is done using the sklearn algorithm selected in init_estimator()
         :param plot:            Flag to plot 2D projection of word instance embeddings
         """
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
         fl = open(self.save_dir + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
+
+        # Stores nbr of senses for each vocab word
+        self.num_senses = []
 
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
@@ -386,6 +389,7 @@ class WordSenseModel:
         :param labels:          Cluster labels for each word instance
         """
         num_clusters = max(labels) + 1
+        self.num_senses.append(num_clusters)
         print(f"Num clusters: {num_clusters}")
         fl.write(f"{word}\t\t{num_clusters}\n")
 
