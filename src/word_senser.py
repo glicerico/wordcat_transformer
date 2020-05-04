@@ -38,9 +38,9 @@ class WordSenseModel:
         self.lang_mod = None
         self.estimator = None  # Clustering object
         self.save_dir = None  # Directory to save disambiguated senses
-        self.num_senses = None  # Stores nbr of senses for each vocabulary word
         self.freq_threshold = freq_threshold
-        self.labels = None
+        self.num_senses = None  # Stores nbr of senses for each vocabulary word
+        self.labels = None  # Stores labels for each vocabulary word
 
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
