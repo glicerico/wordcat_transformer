@@ -40,6 +40,7 @@ class WordSenseModel:
         self.save_dir = None  # Directory to save disambiguated senses
         self.num_senses = None  # Stores nbr of senses for each vocabulary word
         self.freq_threshold = freq_threshold
+        self.labels = None
 
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
@@ -360,6 +361,7 @@ class WordSenseModel:
 
         # Stores nbr of senses for each vocab word
         self.num_senses = []
+        self.labels = {}
 
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
@@ -373,10 +375,14 @@ class WordSenseModel:
 
             print(f'Disambiguating word \"{word}\"...')
             self.estimator.fit(curr_embeddings)  # Disambiguate
+            self.labels[word] = self.estimator.labels_
             if plot:
                 self.plot_instances(curr_embeddings, self.estimator.labels_, word)
 
             self.export_clusters(fl, word, self.estimator.labels_)
+
+        with open(self.save_dir + '.labels', 'wb') as flabels:
+            pickle.dump(self.labels, flabels)
 
         fl.write("\n")
         fl.close()
