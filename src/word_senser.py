@@ -383,7 +383,7 @@ class WordSenseModel:
             self.export_clusters(fl, word, self.estimator.labels_)
 
         with open(self.save_dir + '.labels', 'wb') as flabels:
-            pickle.dump(self.labels, flabels)
+            pickle.dump((self.num_senses, self.labels), flabels)
 
         fl.write("\n")
         fl.close()
