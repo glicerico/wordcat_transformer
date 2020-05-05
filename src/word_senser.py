@@ -39,7 +39,6 @@ class WordSenseModel:
         self.estimator = None  # Clustering object
         self.save_dir = None  # Directory to save disambiguated senses
         self.freq_threshold = freq_threshold
-        self.labels = None  # Stores nbr of senses for each vocab word, and sense-labels for its instances
 
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
@@ -375,7 +374,14 @@ class WordSenseModel:
             if plot:
                 self.plot_instances(curr_embeddings, self.estimator.labels_, word)
 
-            self.export_clusters(fl, word, self.estimator.labels_)
+            curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
+            if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
+                self.cluster_centroids[word] = curr_centroids
+
+        with open(pickle_cent, 'wb') as h:
+            pickle.dump(self.cluster_centroids, h)
+
+        print("Cluster centroids stored in " + pickle_cent)
 
         with open(self.save_dir + '.labels', 'wb') as flabels:
             pickle.dump(self.labels, flabels)
