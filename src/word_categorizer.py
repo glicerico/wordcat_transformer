@@ -12,6 +12,7 @@ from tqdm import tqdm
 class WordCategorizer:
     def __init__(self):
         self.matrix = None  # Stores sent probability for each word-sentence pair (rows are words)
+        self.wsd_matrix = None  # Stores sent probability for each word sense-sentence pair (rows are words)
         self.sentences = None  # List of corpus textual sentences
         self.vocab_map = None  # Dictionary with counts and coordinates of every occurrence of each word
         self.num_senses = None  # Stores nbr of senses for each vocabulary word
@@ -55,23 +56,27 @@ class WordCategorizer:
         # probability assigned to corresponding word-sense vector. Each instance only contributes to the
         # embedding vector of the closest sense.
 
+    def restructure_matrix(self):
+        total_senses = sum(self.num_senses)
+        total_instances = len(self.sentences)
+        self.wsd_matrix = np.zeros([total_senses, total_instances])
+        for index, word in self.vocab_map.keys():
+
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':
             k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
             estimator = KMeans(n_clusters=int(k), n_jobs=4)
-            estimator.fit(self.matrix)  # Cluster matrix
         elif method == 'DBSCAN':
             eps = kwargs.get('k', 0.2)
             min_samples = kwargs.get('min_samples', 3)
             estimator = DBSCAN(min_samples=min_samples, eps=eps, n_jobs=4, metric='cosine')
-            estimator.fit(self.matrix)  # Cluster matrix
         elif method == 'OPTICS':
             estimator = OPTICS(min_samples=2, metric='cosine', n_jobs=4)
-            estimator.fit(self.matrix)  # Cluster matrix
         else:
             print("Clustering method not implemented...")
             exit(1)
 
+        estimator.fit(self.wsd_matrix)  # Cluster matrix
         return estimator.labels_
 
     def write_clusters(self, method, save_to, labels, clust_param):
@@ -120,7 +125,7 @@ if __name__ == '__main__':
         print("Word senses file found")
         wc.load_senses(args.pickle_WSD)
         # Restructure matrix with WSD info
-        wc.restructure_matrix()  # TODO: implement
+        wc.restructure_matrix()
 
     print("Start clustering...")
     if not os.path.exists(args.save_to):

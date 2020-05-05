@@ -26,7 +26,7 @@ MASK = '[MASK]'
 
 
 class WordSenseModel:
-    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True, freq_threshold=5):
+    def __init__(self, pretrained_model, device_number='cuda:1', use_cuda=True, freq_threshold=5):
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
@@ -39,8 +39,7 @@ class WordSenseModel:
         self.estimator = None  # Clustering object
         self.save_dir = None  # Directory to save disambiguated senses
         self.freq_threshold = freq_threshold
-        self.num_senses = None  # Stores nbr of senses for each vocabulary word
-        self.labels = None  # Stores labels for each vocabulary word
+        self.labels = None  # Stores nbr of senses for each vocab word, and sense-labels for its instances
 
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
@@ -357,31 +356,29 @@ class WordSenseModel:
         fl = open(self.save_dir + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
 
-        # Stores nbr of senses for each vocab word
-        self.num_senses = []
-        self.labels = {}
+        self.labels = {}  # Reset
 
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
             curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
+            self.labels[word] = [1, None]  # Init labels struct for current word
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Won't cluster: word \"{word}\" frequency is lower than threshold")
-                self.num_senses.append(1)
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
             self.estimator.fit(curr_embeddings)  # Disambiguate
-            self.labels[word] = self.estimator.labels_
+            self.labels[word][1] = self.estimator.labels_
             if plot:
                 self.plot_instances(curr_embeddings, self.estimator.labels_, word)
 
             self.export_clusters(fl, word, self.estimator.labels_)
 
         with open(self.save_dir + '.labels', 'wb') as flabels:
-            pickle.dump((self.num_senses, self.labels), flabels)
+            pickle.dump(self.labels, flabels)
 
         fl.write("\n")
         fl.close()
@@ -394,7 +391,7 @@ class WordSenseModel:
         :param labels:          Cluster labels for each word instance
         """
         num_clusters = max(labels) + 1
-        self.num_senses.append(num_clusters)
+        self.labels[word][0] = num_clusters
         print(f"Num clusters: {num_clusters}")
         fl.write(f"{word}\t\t{num_clusters}\n")
 
