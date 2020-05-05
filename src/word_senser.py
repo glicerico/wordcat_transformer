@@ -344,7 +344,7 @@ class WordSenseModel:
             print("Clustering methods implemented are: OPTICS, DBSCAN, KMeans, SphericalKMeans, movMF-soft, movMF-hard")
             exit(1)
 
-    def disambiguate(self, plot=False):
+    def disambiguate(self, pickle_cent='test_cent.pickle', plot=False):
         """
         Disambiguate word senses through clustering their transformer embeddings.
         Clustering is done using the sklearn algorithm selected in init_estimator()
@@ -355,14 +355,11 @@ class WordSenseModel:
         fl = open(self.save_dir + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
 
-        self.labels = {}  # Reset
-
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
             curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
-            self.labels[word] = [1, None]  # Init labels struct for current word
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Won't cluster: word \"{word}\" frequency is lower than threshold")
@@ -370,11 +367,10 @@ class WordSenseModel:
 
             print(f'Disambiguating word \"{word}\"...')
             self.estimator.fit(curr_embeddings)  # Disambiguate
-            self.labels[word][1] = self.estimator.labels_
             if plot:
                 self.plot_instances(curr_embeddings, self.estimator.labels_, word)
 
-            curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
+            curr_centroids = self.export_clusters(fl, self.save_to, word, self.estimator.labels_)
             if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
                 self.cluster_centroids[word] = curr_centroids
 
@@ -382,9 +378,6 @@ class WordSenseModel:
             pickle.dump(self.cluster_centroids, h)
 
         print("Cluster centroids stored in " + pickle_cent)
-
-        with open(self.save_dir + '.labels', 'wb') as flabels:
-            pickle.dump(self.labels, flabels)
 
         fl.write("\n")
         fl.close()
@@ -396,8 +389,8 @@ class WordSenseModel:
         :param word:            Current word to disambiguate
         :param labels:          Cluster labels for each word instance
         """
+        sense_centroids = []  # List with word sense centroids
         num_clusters = max(labels) + 1
-        self.labels[word][0] = num_clusters
         print(f"Num clusters: {num_clusters}")
         fl.write(f"{word}\t\t{num_clusters}\n")
 
@@ -418,9 +411,15 @@ class WordSenseModel:
                         bold_sent = self.get_words(self.sentences[sample])
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
-
+                    # Calculate cluster centroid and save
+                    if i >= 0:  # Don't calculate centroid for unclustered (noise) instances
+                        sense_embeddings = [self.matrix[row] for _, _, row in sense_members]
+                        # Average and normalize centroid
+                        sense_centroids.append(normalize(np.mean(sense_embeddings, 0)))
                 else:
                     fo.write(" is empty\n\n")
+
+        return sense_centroids
 
 
 if __name__ == '__main__':
@@ -438,6 +437,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_to', type=str, default='test', help='Directory to save disambiguated words')
     parser.add_argument('--pretrained', type=str, default='bert-large-uncased', help='Pretrained model to use')
     parser.add_argument('--clustering', type=str, default='SphericalKmeans', help='Clustering method to use')
+    parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
     parser.add_argument('--plot', action='store_true', help='Plot word embeddings?')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
@@ -469,7 +469,7 @@ if __name__ == '__main__':
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
         WSD.init_estimator(args.save_to, clust_method=args.clustering, k=nn)
-        WSD.disambiguate(plot=args.plot)
+        WSD.disambiguate(pickle_cent=args.pickle_cent, plot=args.plot)
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")
