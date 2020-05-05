@@ -15,8 +15,7 @@ class WordCategorizer:
         self.wsd_matrix = None  # Stores sent probability for each word sense-sentence pair (rows are words)
         self.sentences = None  # List of corpus textual sentences
         self.vocab_map = None  # Dictionary with counts and coordinates of every occurrence of each word
-        self.num_senses = None  # Stores nbr of senses for each vocabulary word
-        self.wsd_labels = None  # Stores labels for each vocabulary word
+        self.wsd_labels = None  # Stores nbr of senses for each vocab word, and sense-labels for its instances
 
     def load_senses(self, pickle_senses):
         """
@@ -26,7 +25,7 @@ class WordCategorizer:
         """
         try:
             with open(pickle_senses, 'rb') as fs:
-                self.num_senses, self.wsd_labels = pickle.load(fs)
+                self.wsd_labels = pickle.load(fs)
             print("WSD data successfully loaded!\n")
         except:
             print("ERROR: Loading WSD data failed!!\n")
