@@ -15,9 +15,9 @@ class WordCategorizer:
         self.wsd_matrix = None  # Stores sent probability for each word sense-sentence pair (rows are words)
         self.sentences = None  # List of corpus textual sentences
         self.vocab_map = None  # Dictionary with counts and coordinates of every occurrence of each word
-        self.wsd_labels = None  # Stores nbr of senses for each vocab word, and sense-labels for its instances
+        self.wsd_centroids = None  # Stores centroids for disambiguated senses
 
-    def load_senses(self, pickle_senses):
+    def load_centroids(self, pickle_senses):
         """
         Load ambiguous word senses, as stored by word_senser.py
         :param pickle_senses:
@@ -25,7 +25,7 @@ class WordCategorizer:
         """
         try:
             with open(pickle_senses, 'rb') as fs:
-                self.wsd_labels = pickle.load(fs)
+                self.wsd_centroids= pickle.load(fs)
             print("WSD data successfully loaded!\n")
         except:
             print("ERROR: Loading WSD data failed!!\n")
@@ -51,19 +51,21 @@ class WordCategorizer:
             print("MATRIX File Not Found!! \n")
             exit(1)
 
-        # If word is ambiguous according to self.senses, then this instance is disambiguated, and the sentence
-        # probability assigned to corresponding word-sense vector. Each instance only contributes to the
-        # embedding vector of the closest sense.
-
     def restructure_matrix(self):
-        total_senses = sum(self.num_senses)
+        """
+        For each sentence, sentence probability scores are assigned to the correct word sense if word
+        is ambiguous according to WSD data.
+        Each instance only contributes to the embedding vector of the closest sense.
+        """
+        sense_count = [nbr_senses for nbr_senses, _ in self.wsd_matrix.items()]  # TODO: Improve this
+        total_senses = sum(sense_count)
         total_instances = len(self.sentences)
         self.wsd_matrix = np.zeros([total_senses, total_instances])
         for index, word in self.vocab_map.keys():
 
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':
-            k = kwargs.get('k', 2)  # 2 is default value, if no kwargs were passed
+            k = kwargs.get('k', 2)
             estimator = KMeans(n_clusters=int(k), n_jobs=4)
         elif method == 'DBSCAN':
             eps = kwargs.get('k', 0.2)
@@ -122,7 +124,7 @@ if __name__ == '__main__':
     # Load WSD data
     if args.pickle_WSD:
         print("Word senses file found")
-        wc.load_senses(args.pickle_WSD)
+        wc.load_centroids(args.pickle_WSD)
         # Restructure matrix with WSD info
         wc.restructure_matrix()
 
