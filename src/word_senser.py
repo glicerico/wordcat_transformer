@@ -29,7 +29,7 @@ class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:1', use_cuda=True, freq_threshold=5):
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
-        self.cluster_centroids = {}  # Dictionary with nbr of senses and cluster centroid embeddings for word senses
+        self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for word senses
         self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
         self.pretrained_model = pretrained_model
         self.device_number = device_number
@@ -366,7 +366,6 @@ class WordSenseModel:
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
             curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
-            self.cluster_centroids[word] = (1, [])  # Initialize num_senses-centroid tuple
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Won't cluster: word \"{word}\" frequency is lower than threshold")
@@ -378,8 +377,7 @@ class WordSenseModel:
                 self.plot_instances(curr_embeddings, self.estimator.labels_, word)
 
             curr_centroids = self.export_clusters(fl, word, self.estimator.labels_)
-            if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
-                self.cluster_centroids[word][1] = curr_centroids
+            self.cluster_centroids[word] = curr_centroids
 
         with open(pickle_cent, 'wb') as h:
             pickle.dump(self.cluster_centroids, h)
@@ -397,7 +395,6 @@ class WordSenseModel:
         :param labels:          Cluster labels for each word instance
         """
         sense_centroids = []  # List with word sense centroids
-        self.cluster_centroids[word][0] = sense_centroids
         num_clusters = max(labels) + 1
         print(f"Num clusters: {num_clusters}")
         fl.write(f"{word}\t\t{num_clusters}\n")

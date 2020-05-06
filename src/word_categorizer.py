@@ -57,8 +57,8 @@ class WordCategorizer:
         is ambiguous according to WSD data.
         Each instance only contributes to the embedding vector of the closest sense.
         """
-        sense_count = [nbr_senses for nbr_senses, _ in self.wsd_matrix.items()]  # TODO: Improve this
-        total_senses = sum(sense_count)
+        sense_counts = [len(sense_centroids) for sense_centroids in self.wsd_matrix.values()]  # TODO: Improve this
+        total_senses = sum(sense_counts)
         total_instances = len(self.sentences)
         self.wsd_matrix = np.zeros([total_senses, total_instances])
         for index, word in self.vocab_map.keys():
