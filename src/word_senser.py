@@ -29,7 +29,7 @@ class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:1', use_cuda=True, freq_threshold=5):
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
-        self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
+        self.cluster_centroids = {}  # Dictionary with nbr of senses and cluster centroid embeddings for word senses
         self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
         self.pretrained_model = pretrained_model
         self.device_number = device_number
@@ -50,6 +50,9 @@ class WordSenseModel:
           a) Stores sentences as an array.
           b) Creates dictionary where each vocabulary word is mapped to its occurrences in corpus.
           c) Calculates instance-word matrix, for instances and vocab words in corpus.
+        :param norm_file:
+        :param norm_pickle:
+        :param verbose:
         :param pickle_filename
         :param corpus_file
         """
@@ -109,6 +112,7 @@ class WordSenseModel:
     def get_vocabulary(self, corpus_file, verbose=False):
         """
         Reads all word instances in file, stores their location
+        :param verbose:
         :param corpus_file:     file to get vocabulary
         """
         with open(corpus_file, 'r') as fi:
@@ -275,7 +279,8 @@ class WordSenseModel:
             temp_right[j] = MASK
             repl_sent = masks_left + [MASK] + temp_right
             predictions = self.lang_mod.get_predictions(repl_sent)
-            log_common_prob_back += self.get_log_prob(predictions, right_sent[j], len(left_sent) + 1 + j, verbose=verbose)
+            log_common_prob_back += self.get_log_prob(predictions, right_sent[j], len(left_sent) + 1 + j,
+                                                      verbose=verbose)
 
         return preds_blank_left, preds_blank_right, log_common_prob_forw, log_common_prob_back
 
@@ -289,7 +294,7 @@ class WordSenseModel:
         :return:
         """
         # PCA processing
-        comps_pca= min(3, len(embeddings))
+        comps_pca = min(3, len(embeddings))
         pca = PCA(n_components=comps_pca)
         pca_result = pca.fit_transform(embeddings)
         print('Explained variation per principal component: {}'.format(pca.explained_variance_ratio_))
@@ -348,6 +353,7 @@ class WordSenseModel:
         """
         Disambiguate word senses through clustering their transformer embeddings.
         Clustering is done using the sklearn algorithm selected in init_estimator()
+        :param pickle_cent:
         :param plot:            Flag to plot 2D projection of word instance embeddings
         """
         if not os.path.exists(self.save_dir):
@@ -360,6 +366,7 @@ class WordSenseModel:
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
             curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
+            self.cluster_centroids[word] = (1, [])  # Initialize num_senses-centroid tuple
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Won't cluster: word \"{word}\" frequency is lower than threshold")
@@ -370,9 +377,9 @@ class WordSenseModel:
             if plot:
                 self.plot_instances(curr_embeddings, self.estimator.labels_, word)
 
-            curr_centroids = self.export_clusters(fl, self.save_to, word, self.estimator.labels_)
+            curr_centroids = self.export_clusters(fl, word, self.estimator.labels_)
             if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
-                self.cluster_centroids[word] = curr_centroids
+                self.cluster_centroids[word][1] = curr_centroids
 
         with open(pickle_cent, 'wb') as h:
             pickle.dump(self.cluster_centroids, h)
@@ -390,6 +397,7 @@ class WordSenseModel:
         :param labels:          Cluster labels for each word instance
         """
         sense_centroids = []  # List with word sense centroids
+        self.cluster_centroids[word][0] = sense_centroids
         num_clusters = max(labels) + 1
         print(f"Num clusters: {num_clusters}")
         fl.write(f"{word}\t\t{num_clusters}\n")
