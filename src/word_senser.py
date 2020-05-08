@@ -142,7 +142,7 @@ class WordSenseModel:
         # Process each sentence in corpus
         for words in tqdm(self.sentences):
             print(f"Processing sentence: {words}")
-            bert_tokens = self.lang_mod.tokenizer.tokenize(" ".join(words))
+            bert_tokens = self.lang_mod.tokenize_sent(" ".join(words))
             word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
             # Replace all words in sentence to get their instance-embeddings
