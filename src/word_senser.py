@@ -120,8 +120,8 @@ class WordSenseModel:
             # Process each sentence in corpus
             for sent_nbr, sent in tqdm(enumerate(fi)):
                 bert_tokens = self.lang_mod.tokenize_sent(sent)
-                self.sentences.append(bert_tokens)
                 words = self.get_words(bert_tokens)
+                self.sentences.append(words)
                 # Store word instances in vocab_map
                 for word_pos, word in enumerate(words):
                     if word not in self.vocab_map:
@@ -140,9 +140,9 @@ class WordSenseModel:
         instances = {}  # Stores matrix indexes for each instance embedding
         embeddings_count = 0  # Counts embeddings created (matrix row nbr)
         # Process each sentence in corpus
-        for bert_tokens in tqdm(self.sentences):
-            print(f"Processing sentence: {bert_tokens}")
-            words = self.get_words(bert_tokens)
+        for words in tqdm(self.sentences):
+            print(f"Processing sentence: {words}")
+            bert_tokens = self.lang_mod.tokenizer.tokenize(" ".join(words))
             word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
             # Replace all words in sentence to get their instance-embeddings
@@ -413,7 +413,7 @@ class WordSenseModel:
                     fo.write('Samples:\n')
                     # Write sample sentences to file, with focus word in CAPS for easier reading
                     for sample, focus_word, _ in sent_samples:
-                        bold_sent = self.get_words(self.sentences[sample])
+                        bold_sent = self.sentences[sample]
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
                     # Calculate cluster centroid and save
