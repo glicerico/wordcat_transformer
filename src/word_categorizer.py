@@ -1,4 +1,5 @@
 import argparse
+import copy
 import os
 import pickle
 
@@ -57,11 +58,22 @@ class WordCategorizer:
         is ambiguous according to WSD data.
         Each instance only contributes to the embedding vector of the closest sense.
         """
-        sense_counts = [len(sense_centroids) for sense_centroids in self.wsd_matrix.values()]  # TODO: Improve this
+        # Store nbr senses per word
+        sense_counts = [len(sense_centroids) for sense_centroids in self.wsd_centroids.values()]
         total_senses = sum(sense_counts)
         total_instances = len(self.sentences)
-        self.wsd_matrix = np.zeros([total_senses, total_instances])
-        for index, word in self.vocab_map.keys():
+        self.wsd_matrix = np.zeros([total_senses, total_instances])  # Init wsd matrix with zeros
+        for row_id, embedding in enumerate(self.matrix):
+            for column_id, word, centroids in enumerate(self.wsd_centroids):
+                if centroids == [0]:  # If word is not ambiguous
+                    closest_sense = 0
+                else:
+                    # Estimate closest sense if word is ambiguous
+                    closest_sense = np.argmax(np.dot(embedding, np.transpose(centroids)))
+                wsd_column_id = sum(sense_counts[:column_id]) + closest_sense
+                self.wsd_matrix[row_id, wsd_column_id] = self.matrix[row_id][column_id]  # Assign to closest sense
+
+        print(self.wsd_matrix)
 
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':
@@ -77,7 +89,7 @@ class WordCategorizer:
             print("Clustering method not implemented...")
             exit(1)
 
-        estimator.fit(self.wsd_matrix)  # Cluster matrix
+        estimator.fit(np.transpose(self.wsd_matrix))  # Cluster word-senses
         return estimator.labels_
 
     def write_clusters(self, method, save_to, labels, clust_param):
@@ -127,6 +139,8 @@ if __name__ == '__main__':
         wc.load_centroids(args.pickle_WSD)
         # Restructure matrix with WSD info
         wc.restructure_matrix()
+    else:
+        wc.wsd_matrix = wc.matrix  # point to same matrix if no WSD data
 
     print("Start clustering...")
     if not os.path.exists(args.save_to):
