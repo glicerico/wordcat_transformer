@@ -29,6 +29,7 @@ class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:1', use_cuda=True, freq_threshold=5):
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
+        self.function_words = []  # List with function words (most frequent)
         self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for word senses
         self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
         self.pretrained_model = pretrained_model
@@ -98,16 +99,17 @@ class WordSenseModel:
         sentence = self.lang_mod.tokenizer.convert_tokens_to_string(tokenized_sent[1:-1])  # Ignore boundary tokens
         return sentence.split()
 
-    def remove_function_words(self, functional_threshold):
+    def find_function_words(self, functional_threshold):
         """
-        Remove top words from vocabulary, assuming that most common words are functional words,
+        Find top words from vocabulary, assuming that most common words are functional words,
         which we don't want to disambiguate
         :param functional_threshold:    Fraction of words to remove
         """
-        sorted_vocab = sorted(self.vocab_map.items(), key=lambda kv: len(kv[1]))  # Sort words by frequency
-        nbr_delete = int(len(sorted_vocab) * functional_threshold)  # Nbr of words to delete
-        if nbr_delete > 0:  # Prevent deleting all words if nbr_delete is zero
-            self.vocab_map = dict(sorted_vocab[:-nbr_delete])  # Delete most common words
+        sorted_vocab = dict(sorted(self.vocab_map.items(), key=lambda kv: len(kv[1])))  # Sort words by frequency
+        sorted_vocab = sorted_vocab.keys()
+        nbr_functionwords= int(len(sorted_vocab) * functional_threshold)  # Nbr of function words
+        if nbr_functionwords > 0:  # Prevent choosing all words if nbr_functionwords is zero
+            self.function_words = sorted_vocab[:nbr_functionwords]  # List most common words
 
     def get_vocabulary(self, corpus_file, verbose=False):
         """
@@ -363,13 +365,17 @@ class WordSenseModel:
 
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
+            self.cluster_centroids[word] = [0]  # Placeholder for non-ambiguous words
+            if word in self.function_words:  # Don't disambiguate if function word
+                print(f"Won't disambiguate word \"{word}\": too frequent (function word)")
+                continue
+
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
             curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
-                print(f"Won't cluster: word \"{word}\" frequency is lower than threshold")
-                self.cluster_centroids[word] = [0]  # Placeholder for non-ambiguous words
+                print(f"Won't disambiguate word \"{word}\": frequency is lower than threshold")
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
@@ -470,7 +476,7 @@ if __name__ == '__main__':
 
     # Remove top words from disambiguation
     print(f"Removing the top {args.func_frac} fraction of words")
-    WSD.remove_function_words(args.func_frac)
+    WSD.find_function_words(args.func_frac)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
