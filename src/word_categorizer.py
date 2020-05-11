@@ -79,7 +79,6 @@ class WordCategorizer:
                 self.wsd_matrix[row_id, wsd_column_id] = self.matrix[row_id][column_id]  # Assign to closest sense
 
         print("Matrix restructured with WSD data!")
-        print(self.wsd_matrix)
 
     def cluster_words(self, method='KMeans', **kwargs):
         if method == 'KMeans':

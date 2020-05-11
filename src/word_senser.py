@@ -105,11 +105,10 @@ class WordSenseModel:
         which we don't want to disambiguate
         :param functional_threshold:    Fraction of words to remove
         """
-        sorted_vocab = dict(sorted(self.vocab_map.items(), key=lambda kv: len(kv[1])))  # Sort words by frequency
-        sorted_vocab = sorted_vocab.keys()
+        sorted_vocab = sorted(self.vocab_map.items(), key=lambda kv: len(kv[1]))  # Sort words by frequency
         nbr_functionwords= int(len(sorted_vocab) * functional_threshold)  # Nbr of function words
         if nbr_functionwords > 0:  # Prevent choosing all words if nbr_functionwords is zero
-            self.function_words = sorted_vocab[:nbr_functionwords]  # List most common words
+            self.function_words = dict(sorted_vocab[-nbr_functionwords:])  # List most common words
 
     def get_vocabulary(self, corpus_file, verbose=False):
         """
@@ -366,7 +365,7 @@ class WordSenseModel:
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
             self.cluster_centroids[word] = [0]  # Placeholder for non-ambiguous words
-            if word in self.function_words:  # Don't disambiguate if function word
+            if word in self.function_words.keys():  # Don't disambiguate if function word
                 print(f"Won't disambiguate word \"{word}\": too frequent (function word)")
                 continue
 
