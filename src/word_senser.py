@@ -369,6 +369,7 @@ class WordSenseModel:
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Won't cluster: word \"{word}\" frequency is lower than threshold")
+                self.cluster_centroids[word] = [0]  # Placeholder for non-ambiguous words
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
@@ -420,7 +421,7 @@ class WordSenseModel:
                     if i >= 0:  # Don't calculate centroid for unclustered (noise) instances
                         sense_embeddings = [self.matrix[row] for _, _, row in sense_members]
                         # Average and normalize centroid
-                        sense_centroids.append(normalize(np.mean(sense_embeddings, 0)))
+                        sense_centroids.append(normalize([np.mean(sense_embeddings, 0)])[0])
                 else:
                     fo.write(" is empty\n\n")
 
