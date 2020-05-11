@@ -929,5 +929,8 @@ All three tested methods (SphericalKMeans, 2 mixture of von Mises-Fisher
 ## May 3, 2020
 Start integrating latest WSD method with word category formation.
 
-## May 4, 2020
-
+## May 11, 2020
+In the past days, integrated word categorizer with new WSD method.
+Also needed to redesign some parts of the WSD senser to make it work.
+Concern: Normalization of word-sense embeddings is probably needed, as
+probabilities coming from different-length sentences may affect results.
