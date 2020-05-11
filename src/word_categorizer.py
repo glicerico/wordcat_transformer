@@ -17,6 +17,7 @@ class WordCategorizer:
         self.sentences = None  # List of corpus textual sentences
         self.vocab_map = None  # Dictionary with counts and coordinates of every occurrence of each word
         self.wsd_centroids = None  # Stores centroids for disambiguated senses
+        self.disamb_vocab = []
 
     def load_centroids(self, pickle_senses):
         """
@@ -59,12 +60,16 @@ class WordCategorizer:
         Each instance only contributes to the embedding vector of the closest sense.
         """
         # Store nbr senses per word
-        sense_counts = [len(sense_centroids) for sense_centroids in self.wsd_centroids.values()]
+        sense_counts = []
+        for word, sense_centroids in self.wsd_centroids.items():
+            sense_counts.append(len(sense_centroids))
+            self.disamb_vocab.extend([word] * len(sense_centroids))
+        # sense_counts = [len(sense_centroids) for sense_centroids in self.wsd_centroids.values()]
         total_senses = sum(sense_counts)
-        total_instances = len(self.sentences)
-        self.wsd_matrix = np.zeros([total_senses, total_instances])  # Init wsd matrix with zeros
+        total_instances = len(self.matrix)
+        self.wsd_matrix = np.zeros([total_instances, total_senses])  # Init wsd matrix with zeros
         for row_id, embedding in enumerate(self.matrix):
-            for column_id, word, centroids in enumerate(self.wsd_centroids):
+            for column_id, centroids in enumerate(self.wsd_centroids.values()):
                 if centroids == [0]:  # If word is not ambiguous
                     closest_sense = 0
                 else:
@@ -73,6 +78,7 @@ class WordCategorizer:
                 wsd_column_id = sum(sense_counts[:column_id]) + closest_sense
                 self.wsd_matrix[row_id, wsd_column_id] = self.matrix[row_id][column_id]  # Assign to closest sense
 
+        print("Matrix restructured with WSD data!")
         print(self.wsd_matrix)
 
     def cluster_words(self, method='KMeans', **kwargs):
