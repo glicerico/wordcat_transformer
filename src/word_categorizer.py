@@ -7,6 +7,7 @@ import numpy as np
 import random as rand
 from sklearn.cluster import KMeans, DBSCAN, OPTICS
 from sklearn.metrics.pairwise import cosine_distances
+from sklearn.preprocessing import normalize
 from tqdm import tqdm
 
 
@@ -78,6 +79,7 @@ class WordCategorizer:
                 wsd_column_id = sum(sense_counts[:column_id]) + closest_sense
                 self.wsd_matrix[row_id, wsd_column_id] = self.matrix[row_id][column_id]  # Assign to closest sense
 
+        self.wsd_matrix = normalize(self.wsd_matrix, axis=0)  # Normalize restructured word-sense embeddings
         print("Matrix restructured with WSD data!")
 
     def cluster_words(self, method='KMeans', **kwargs):
