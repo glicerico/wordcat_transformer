@@ -176,7 +176,7 @@ class WordSenseModel:
                     embedding.append(curr_prob)
 
                 # Store this sentence embeddings in the general list
-                self.matrix.append(np.float32(embedding))  # Lower precision to save mem, speed
+                self.matrix.append(normalize([embedding])[0])  # Store embedding normalized to unit vector
 
     def complete_probs(self, common_probs, left_sent, right_sent, word_token, verbose=False):
         """
@@ -371,7 +371,7 @@ class WordSenseModel:
 
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
-            curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
+            # curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Won't disambiguate word \"{word}\": frequency is lower than threshold")
@@ -473,8 +473,8 @@ if __name__ == '__main__':
     WSD.load_matrix(args.pickle_emb, args.corpus, verbose=args.verbose, norm_pickle=args.norm_pickle,
                     norm_file=args.norm_file)
 
-    # Remove top words from disambiguation
-    print(f"Removing the top {args.func_frac} fraction of words")
+    # Find most frequent words to not disambiguate them
+    print(f"Finding the top {args.func_frac} fraction of words")
     WSD.find_function_words(args.func_frac)
 
     print("Start disambiguation...")
