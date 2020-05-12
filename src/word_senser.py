@@ -26,27 +26,34 @@ MASK = '[MASK]'
 
 
 class WordSenseModel:
-    def __init__(self, pretrained_model, device_number='cuda:2', use_cuda=True):
+    def __init__(self, pretrained_model, device_number='cuda:1', use_cuda=True, freq_threshold=5):
         self.sentences = []  # List of corpus textual sentences
         self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
-        self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for each word sense
+        self.function_words = []  # List with function words (most frequent)
+        self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for word senses
         self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
         self.pretrained_model = pretrained_model
         self.device_number = device_number
         self.use_cuda = use_cuda
 
         self.lang_mod = None
+        self.estimator = None  # Clustering object
+        self.save_dir = None  # Directory to save disambiguated senses
+        self.freq_threshold = freq_threshold
 
     def apply_bert_tokenizer(self, word):
         return self.lang_mod.tokenizer.tokenize(word)
 
-    def load_matrix(self, pickle_filename, corpus_file, verbose=False, norm_pickle=None, norm_file=None):
+    def load_matrix(self, pickle_filename, corpus_file, verbose=False, norm_pickle=None, norm_file=''):
         """
         First pass on the corpus sentences. If pickle file is present, load data; else, calculate it.
         This method:
           a) Stores sentences as an array.
           b) Creates dictionary where each vocabulary word is mapped to its occurrences in corpus.
           c) Calculates instance-word matrix, for instances and vocab words in corpus.
+        :param norm_file:
+        :param norm_pickle:
+        :param verbose:
         :param pickle_filename
         :param corpus_file
         """
@@ -68,13 +75,11 @@ class WordSenseModel:
             print("Loading Bert MLM...")
             self.lang_mod = BertLM(self.pretrained_model, self.device_number, self.use_cuda)
 
-            # Calculate normalization scores if option is present
+            # Calculate normalization scores
             self.lang_mod.load_norm_scores(norm_pickle, norm_file)
 
             print("Loading vocabulary")
             self.get_vocabulary(corpus_file, verbose=verbose)
-            with open(pickle_filename[:-6] + 'vocab', 'wb') as v:
-                pickle.dump(list(self.vocab_map.keys()), v)
 
             print("Calculate matrix...")
             self.calculate_matrix(verbose=verbose)
@@ -94,20 +99,21 @@ class WordSenseModel:
         sentence = self.lang_mod.tokenizer.convert_tokens_to_string(tokenized_sent[1:-1])  # Ignore boundary tokens
         return sentence.split()
 
-    def remove_function_words(self, functional_threshold):
+    def find_function_words(self, functional_threshold):
         """
-        Remove top words from vocabulary, assuming that most common words are functional words,
+        Find top words from vocabulary, assuming that most common words are functional words,
         which we don't want to disambiguate
         :param functional_threshold:    Fraction of words to remove
         """
         sorted_vocab = sorted(self.vocab_map.items(), key=lambda kv: len(kv[1]))  # Sort words by frequency
-        nbr_delete = int(len(sorted_vocab) * functional_threshold)  # Nbr of words to delete
-        if nbr_delete > 0:  # Prevent deleting all words if nbr_delete is zero
-            self.vocab_map = dict(sorted_vocab[:-nbr_delete])  # Delete most common words
+        nbr_functionwords= int(len(sorted_vocab) * functional_threshold)  # Nbr of function words
+        if nbr_functionwords > 0:  # Prevent choosing all words if nbr_functionwords is zero
+            self.function_words = dict(sorted_vocab[-nbr_functionwords:])  # List most common words
 
     def get_vocabulary(self, corpus_file, verbose=False):
         """
         Reads all word instances in file, stores their location
+        :param verbose:
         :param corpus_file:     file to get vocabulary
         """
         with open(corpus_file, 'r') as fi:
@@ -115,8 +121,8 @@ class WordSenseModel:
             # Process each sentence in corpus
             for sent_nbr, sent in tqdm(enumerate(fi)):
                 bert_tokens = self.lang_mod.tokenize_sent(sent)
-                self.sentences.append(bert_tokens)
                 words = self.get_words(bert_tokens)
+                self.sentences.append(words)
                 # Store word instances in vocab_map
                 for word_pos, word in enumerate(words):
                     if word not in self.vocab_map:
@@ -135,9 +141,9 @@ class WordSenseModel:
         instances = {}  # Stores matrix indexes for each instance embedding
         embeddings_count = 0  # Counts embeddings created (matrix row nbr)
         # Process each sentence in corpus
-        for bert_tokens in tqdm(self.sentences):
-            print(f"Processing sentence: {bert_tokens}")
-            words = self.get_words(bert_tokens)
+        for words in tqdm(self.sentences):
+            print(f"Processing sentence: {words}")
+            bert_tokens = self.lang_mod.tokenize_sent(" ".join(words))
             word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
             # Replace all words in sentence to get their instance-embeddings
@@ -274,14 +280,23 @@ class WordSenseModel:
             temp_right[j] = MASK
             repl_sent = masks_left + [MASK] + temp_right
             predictions = self.lang_mod.get_predictions(repl_sent)
-            log_common_prob_back += self.get_log_prob(predictions, right_sent[j], len(left_sent) + 1 + j, verbose=verbose)
+            log_common_prob_back += self.get_log_prob(predictions, right_sent[j], len(left_sent) + 1 + j,
+                                                      verbose=verbose)
 
         return preds_blank_left, preds_blank_right, log_common_prob_forw, log_common_prob_back
 
-    def plot_instances(self, embeddings, labels, word):
+    @staticmethod
+    def plot_instances(embeddings, labels, word):
+        """
+        Plot word-instance embeddings
+        :param embeddings:
+        :param labels:
+        :param word:
+        :return:
+        """
         # PCA processing
-        comps_PCA = min(3, len(embeddings))
-        pca = PCA(n_components=comps_PCA)
+        comps_pca = min(3, len(embeddings))
+        pca = PCA(n_components=comps_pca)
         pca_result = pca.fit_transform(embeddings)
         print('Explained variation per principal component: {}'.format(pca.explained_variance_ratio_))
 
@@ -300,77 +315,75 @@ class WordSenseModel:
         plt.show()
         print("PLOTTED")
 
-    def disambiguate(self, save_dir, clust_method='OPTICS', freq_threshold=5, pickle_cent='test_cent.pickle',
-                     plot=False, **kwargs):
-        """
-        Disambiguate word senses through clustering their transformer embeddings.
-        Clustering is done using the selected sklearn algorithm.
-        If OPTICS method is used, then DBSCAN clusters are also obtained
-        :param save_dir:        Directory to save disambiguated senses
-        :param clust_method:    Clustering method used
-        :param freq_threshold:  Frequency threshold for a word to be disambiguated
-        :param pickle_cent:     Pickle file to store cluster centroids
-        :param plot:            Flag to plot 2D projection of word instance embeddings
-        :param kwargs:          Clustering parameters
-        """
-        # Use OPTICS estimator also to get DBSCAN clusters
+    def init_estimator(self, save_to, clust_method='OPTICS', **kwargs):
         if clust_method == 'OPTICS':
-            min_samples = kwargs.get('min_samples', 1)
+            self.min_samples = kwargs.get('min_samples', 1)
             # Init clustering object
-            estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4)
-            save_to = save_dir + "_OPTICS_minsamp" + str(min_samples)
+            self.estimator = OPTICS(min_samples=self.min_samples, metric='cosine', n_jobs=4)
+            self.save_dir = save_to + "_OPTICS_minsamp" + str(self.min_samples)
         elif clust_method == 'KMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
-            freq_threshold = max(freq_threshold, k)
-            estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
-            save_to = save_dir + "_KMeans_k" + str(k)
+            self.freq_threshold = max(self.freq_threshold, k)
+            self.estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
+            self.save_dir = save_to + "_KMeans_k" + str(k)
         elif clust_method == 'DBSCAN':
-            min_samples = kwargs.get('min_samples', 2)
+            self.min_samples = kwargs.get('min_samples', 2)
             eps = kwargs.get('eps', 0.3)
-            estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=5, eps=eps)
-            save_to = save_dir + "_DBSCAN_minsamp" + str(min_samples) + '_eps' + str(eps)
+            self.estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=self.min_samples, eps=eps)
+            self.save_dir = save_to + "_DBSCAN_minsamp" + str(self.min_samples) + '_eps' + str(eps)
         elif clust_method == 'SphericalKMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
-            freq_threshold = max(freq_threshold, k)
-            estimator = SphericalKMeans(n_clusters=k, n_jobs=4)
-            save_to = save_dir + "_SphericalKMeans_k" + str(k)
+            self.freq_threshold = max(self.freq_threshold, k)
+            self.estimator = SphericalKMeans(n_clusters=k, n_jobs=4)
+            self.save_dir = save_to + "_SphericalKMeans_k" + str(k)
         elif clust_method == 'movMF-soft':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
-            freq_threshold = max(freq_threshold, k)
-            estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="soft")
-            save_to = save_dir + "_movMF-soft_k" + str(k)
+            self.freq_threshold = max(self.freq_threshold, k)
+            self.estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="soft")
+            self.save_dir = save_to + "_movMF-soft_k" + str(k)
         elif clust_method == 'movMF-hard':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
-            freq_threshold = max(freq_threshold, k)
-            estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="hard")
-            save_to = save_dir + "_movMF-hard_k" + str(k)
+            self.freq_threshold = max(self.freq_threshold, k)
+            self.estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="hard")
+            self.save_dir = save_to + "_movMF-hard_k" + str(k)
         else:
             print("Clustering methods implemented are: OPTICS, DBSCAN, KMeans, SphericalKMeans, movMF-soft, movMF-hard")
             exit(1)
 
-        if not os.path.exists(save_to):
-            os.makedirs(save_to)
-        fl = open(save_to + "/clustering.log", 'w')  # Logging file
+    def disambiguate(self, pickle_cent='test_cent.pickle', plot=False):
+        """
+        Disambiguate word senses through clustering their transformer embeddings.
+        Clustering is done using the sklearn algorithm selected in init_estimator()
+        :param pickle_cent:
+        :param plot:            Flag to plot 2D projection of word instance embeddings
+        """
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        fl = open(self.save_dir + "/clustering.log", 'w')  # Logging file
         fl.write(f"# WORD\t\tCLUSTERS\n")
 
         # Loop for each word in vocabulary
         for word, instances in self.vocab_map.items():
+            self.cluster_centroids[word] = [0]  # Placeholder for non-ambiguous words
+            if word in self.function_words.keys():  # Don't disambiguate if function word
+                print(f"Won't disambiguate word \"{word}\": too frequent (function word)")
+                continue
+
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
             curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
 
-            if len(curr_embeddings) < freq_threshold:  # Don't disambiguate if word is infrequent
-                print(f"Word \"{word}\" frequency lower than threshold")
+            if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
+                print(f"Won't disambiguate word \"{word}\": frequency is lower than threshold")
                 continue
 
             print(f'Disambiguating word \"{word}\"...')
-            estimator.fit(curr_embeddings)  # Disambiguate
+            self.estimator.fit(curr_embeddings)  # Disambiguate
             if plot:
-                self.plot_instances(curr_embeddings, estimator.labels_, word)
+                self.plot_instances(curr_embeddings, self.estimator.labels_, word)
 
-            curr_centroids = self.export_clusters(fl, save_to, word, estimator.labels_)
-            if len(curr_centroids) > 1:  # Only store centroids for ambiguous words
-                self.cluster_centroids[word] = curr_centroids
+            curr_centroids = self.export_clusters(fl, word, self.estimator.labels_)
+            self.cluster_centroids[word] = curr_centroids
 
         with open(pickle_cent, 'wb') as h:
             pickle.dump(self.cluster_centroids, h)
@@ -380,11 +393,10 @@ class WordSenseModel:
         fl.write("\n")
         fl.close()
 
-    def export_clusters(self, fl, save_dir, word, labels):
+    def export_clusters(self, fl, word, labels):
         """
         Write clustering results to files
         :param fl:              handle for logging file
-        :param save_dir:        Directory to save disambiguated senses
         :param word:            Current word to disambiguate
         :param labels:          Cluster labels for each word instance
         """
@@ -394,7 +406,7 @@ class WordSenseModel:
         fl.write(f"{word}\t\t{num_clusters}\n")
 
         # Write senses to file, with some sentence examples
-        with open(save_dir + '/' + word + ".disamb", "w") as fo:
+        with open(self.save_dir + '/' + word + ".disamb", "w") as fo:
             for i in range(-1, num_clusters):  # Also write unclustered words
                 sense_members = [self.vocab_map[word][j] for j, k in enumerate(labels) if k == i]
                 fo.write(f"Cluster #{i}")
@@ -407,14 +419,14 @@ class WordSenseModel:
                     fo.write('Samples:\n')
                     # Write sample sentences to file, with focus word in CAPS for easier reading
                     for sample, focus_word, _ in sent_samples:
-                        bold_sent = self.get_words(self.sentences[sample])
+                        bold_sent = self.sentences[sample]
                         bold_sent[focus_word] = bold_sent[focus_word].upper()
                         fo.write(" ".join(bold_sent) + '\n')
-
                     # Calculate cluster centroid and save
                     if i >= 0:  # Don't calculate centroid for unclustered (noise) instances
                         sense_embeddings = [self.matrix[row] for _, _, row in sense_members]
-                        sense_centroids.append(np.mean(sense_embeddings, 0))
+                        # Average and normalize centroid
+                        sense_centroids.append(normalize([np.mean(sense_embeddings, 0)])[0])
                 else:
                     fo.write(" is empty\n\n")
 
@@ -438,7 +450,7 @@ if __name__ == '__main__':
     parser.add_argument('--clustering', type=str, default='SphericalKmeans', help='Clustering method to use')
     parser.add_argument('--pickle_cent', type=str, default='test_cent.pickle', help='Pickle file for cluster centroids')
     parser.add_argument('--verbose', action='store_true', help='Print processing details')
-    parser.add_argument('--plot', action='store_true', help='Use GPU?')
+    parser.add_argument('--plot', action='store_true', help='Plot word embeddings?')
     parser.add_argument('--pickle_emb', type=str, default='test.pickle', help='Pickle file for Embeddings/Save '
                                                                               'Embeddings to file')
     parser.add_argument('--norm_file', type=str, default='', help='Sentences file to use for normalization')
@@ -454,7 +466,8 @@ if __name__ == '__main__':
     else:
         print("Processing without CUDA!")
 
-    WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda)
+    WSD = WordSenseModel(pretrained_model=args.pretrained, device_number=args.device, use_cuda=args.use_cuda,
+                         freq_threshold=args.threshold)
 
     print("Obtaining word embeddings...")
     WSD.load_matrix(args.pickle_emb, args.corpus, verbose=args.verbose, norm_pickle=args.norm_pickle,
@@ -462,12 +475,12 @@ if __name__ == '__main__':
 
     # Remove top words from disambiguation
     print(f"Removing the top {args.func_frac} fraction of words")
-    WSD.remove_function_words(args.func_frac)
+    WSD.find_function_words(args.func_frac)
 
     print("Start disambiguation...")
     for nn in range(args.start_k, args.end_k + 1, args.step_k):
-        WSD.disambiguate(args.save_to, clust_method=args.clustering, freq_threshold=args.threshold, k=nn,
-                         pickle_cent=args.pickle_cent, plot=args.plot)
+        WSD.init_estimator(args.save_to, clust_method=args.clustering, k=nn)
+        WSD.disambiguate(pickle_cent=args.pickle_cent, plot=args.plot)
 
     print("\n\n*******************************************************")
     print(f"WSD finished. Output files written in {args.save_to}")

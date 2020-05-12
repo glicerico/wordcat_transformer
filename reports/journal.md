@@ -917,3 +917,20 @@ a bug in this repo.
 All three tested methods (SphericalKMeans, 2 mixture of von Mises-Fisher
  distributions) provide exactly the same results as KMeans, and match well with
  PCA visualization of embeddings.
+ 
+ ## May 2, 2020
+ Tried forward-only WSD with bot fat_saw corpus and smallWSD.
+ Using KMeans for comparison, both give similar (not perfect) results 
+ as bidirectional
+ (forward and backwards) sentence probabilities.
+ Makes me think maybe can use this simplified calculation.
+ TODO: Implement forward-only as an option??
+
+## May 3, 2020
+Start integrating latest WSD method with word category formation.
+
+## May 11, 2020
+In the past days, integrated word categorizer with new WSD method.
+Also needed to redesign some parts of the WSD senser to make it work.
+Concern: Normalization of word-sense embeddings is probably needed, as
+probabilities coming from different-length sentences may affect results.

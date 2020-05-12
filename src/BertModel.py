@@ -12,6 +12,14 @@ class BertTok:
     def __init__(self, pretrained_model='bert-large-uncased'):
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
 
+    def tokenize_sent(self, sentence):
+        tokenized_input = self.tokenizer.tokenize(sentence)
+        if tokenized_input[0] != BOS_TOKEN:
+            tokenized_input.insert(0, BOS_TOKEN)
+        if tokenized_input[-1] != EOS_TOKEN:
+            tokenized_input.append(EOS_TOKEN)
+        return tokenized_input
+
 
 class BertLM:
     def __init__(self, pretrained_model='bert-large-uncased', device_number='cuda:2', use_cuda=False):
