@@ -317,20 +317,20 @@ class WordSenseModel:
 
     def init_estimator(self, save_to, clust_method='OPTICS', **kwargs):
         if clust_method == 'OPTICS':
-            self.min_samples = kwargs.get('min_samples', 1)
+            min_samples = kwargs.get('min_samples', 1)
             # Init clustering object
-            self.estimator = OPTICS(min_samples=self.min_samples, metric='cosine', n_jobs=4)
-            self.save_dir = save_to + "_OPTICS_minsamp" + str(self.min_samples)
+            self.estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4)
+            self.save_dir = save_to + "_OPTICS_minsamp" + str(min_samples)
         elif clust_method == 'KMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
             self.freq_threshold = max(self.freq_threshold, k)
             self.estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
             self.save_dir = save_to + "_KMeans_k" + str(k)
         elif clust_method == 'DBSCAN':
-            self.min_samples = kwargs.get('min_samples', 2)
+            min_samples = kwargs.get('min_samples', 2)
             eps = kwargs.get('eps', 0.3)
-            self.estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=self.min_samples, eps=eps)
-            self.save_dir = save_to + "_DBSCAN_minsamp" + str(self.min_samples) + '_eps' + str(eps)
+            self.estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=min_samples, eps=eps)
+            self.save_dir = save_to + "_DBSCAN_minsamp" + str(min_samples) + '_eps' + str(eps)
         elif clust_method == 'SphericalKMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
             self.freq_threshold = max(self.freq_threshold, k)
