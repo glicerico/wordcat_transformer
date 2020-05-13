@@ -82,25 +82,21 @@ class WordCategorizer:
         print("Matrix restructured with WSD data!")
 
     def cluster_words(self, clust_method='SphericalKMeans', **kwargs):
+        min_samples = int(kwargs.get('min_samples', 1))
+        eps = kwargs.get('eps', 0.3)
+        k = int(kwargs.get('k', 5))  # 5 is default value, if no kwargs were passed
+        # Init clustering object
         if clust_method == 'OPTICS':
-            min_samples = kwargs.get('min_samples', 1)
-            # Init clustering object
             self.estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4)
         elif clust_method == 'DBSCAN':
-            min_samples = kwargs.get('min_samples', 2)
-            eps = kwargs.get('eps', 0.3)
             self.estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=min_samples, eps=eps)
         elif clust_method == 'KMeans':
-            k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
             self.estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
         elif clust_method == 'SphericalKMeans':
-            k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
             self.estimator = SphericalKMeans(n_clusters=k, n_jobs=4)
         elif clust_method == 'movMF-soft':
-            k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
             self.estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="soft")
         elif clust_method == 'movMF-hard':
-            k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
             self.estimator = VonMisesFisherMixture(n_clusters=k, posterior_type="hard")
         else:
             print("Clustering methods implemented are: OPTICS, DBSCAN, KMeans, SphericalKMeans, movMF-soft, movMF-hard")
@@ -114,14 +110,14 @@ class WordCategorizer:
         :param save_to:        Directory to save disambiguated senses
         :param method:         Clustering method used
         """
-        num_clusters = max(self.estimator.labels) + 1
+        num_clusters = max(self.estimator.labels_) + 1
         print(f"Writing {num_clusters} clusters to file")
 
         # Write word categories to file
         append = "/" + method + "_" + str(clust_param)
         with open(save_to + append + '.wordcat', "w") as fo:
             for i in range(-1, num_clusters):  # Also write unclustered words
-                cluster_members = [self.disamb_vocab[j] for j, k in enumerate(self.estimator.labels) if k == i]
+                cluster_members = [self.disamb_vocab[j] for j, k in enumerate(self.estimator.labels_) if k == i]
                 fo.write(f"Cluster #{i}")
                 if len(cluster_members) > 0:  # Handle empty clusters
                     fo.write(": \n[")
