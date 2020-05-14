@@ -82,14 +82,14 @@ class WordCategorizer:
         print("Matrix restructured with WSD data!")
 
     def cluster_words(self, clust_method='SphericalKMeans', **kwargs):
-        min_samples = int(kwargs.get('min_samples', 1))
+        min_samples = int(kwargs.get('min_samples', 3))
         eps = kwargs.get('eps', 0.3)
         k = int(kwargs.get('k', 5))  # 5 is default value, if no kwargs were passed
         # Init clustering object
         if clust_method == 'OPTICS':
             self.estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4)
         elif clust_method == 'DBSCAN':
-            self.estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=min_samples, eps=eps)
+            self.estimator = DBSCAN(min_samples=min_samples, metric='cosine', eps=eps, n_jobs=4)
         elif clust_method == 'KMeans':
             self.estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
         elif clust_method == 'SphericalKMeans':
