@@ -28,9 +28,9 @@ MASK = '[MASK]'
 class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:1', use_cuda=True, freq_threshold=5):
         self.sentences = []  # List of corpus textual sentences
-        self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
-        self.function_words = []  # List with function words (most frequent)
-        self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for word senses
+        self.vocab_map = dict()  # Dictionary with counts and coordinates of every occurrence of each word
+        self.function_words = dict()  # List with function words (most frequent)
+        self.cluster_centroids = dict()  # Dictionary with cluster centroid embeddings for word senses
         self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
         self.pretrained_model = pretrained_model
         self.device_number = device_number
