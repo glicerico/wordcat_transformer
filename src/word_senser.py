@@ -134,6 +134,8 @@ class WordSenseModel:
             print("Vocabulary:")
             print(self.vocab_map)
 
+        print(f"Vocabulary size: {len(self.vocab_map)}")
+
     def calculate_matrix(self, verbose=False):
         """
         Calculates embeddings for all word instances in corpus_file
@@ -147,7 +149,8 @@ class WordSenseModel:
             word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
             # Replace all words in sentence to get their instance-embeddings
-            for word_pos, word in enumerate(words):
+            for word_pos, word in tqdm(enumerate(words)):
+                print(f"Processing {word} (position {word_pos}) with all vocabulary.")
                 if word not in instances:
                     instances[word] = []
                 instances[word].append(embeddings_count)
