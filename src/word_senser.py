@@ -172,8 +172,9 @@ class WordSenseModel:
                         score = self.complete_probs(common_probs, left_sent, right_sent, repl_word)
                         sent_len = len(left_sent) + len(right_sent) + 1
 
-                    curr_prob = self.lang_mod.normalize_score(sent_len, score)
-                    embedding.append(curr_prob)
+                    # curr_prob = self.lang_mod.normalize_score(sent_len, score)
+                    # embedding.append(curr_prob)
+                    embedding.append(score)
 
                 # Store this sentence embeddings in the general list
                 self.matrix.append(normalize([embedding])[0])  # Store embedding normalized to unit vector
