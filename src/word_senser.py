@@ -28,9 +28,9 @@ MASK = '[MASK]'
 class WordSenseModel:
     def __init__(self, pretrained_model, device_number='cuda:1', use_cuda=True, freq_threshold=5):
         self.sentences = []  # List of corpus textual sentences
-        self.vocab_map = {}  # Dictionary with counts and coordinates of every occurrence of each word
-        self.function_words = []  # List with function words (most frequent)
-        self.cluster_centroids = {}  # Dictionary with cluster centroid embeddings for word senses
+        self.vocab_map = dict()  # Dictionary with counts and coordinates of every occurrence of each word
+        self.function_words = dict()  # List with function words (most frequent)
+        self.cluster_centroids = dict()  # Dictionary with cluster centroid embeddings for word senses
         self.matrix = []  # sentence-word matrix, containing instance vectors to cluster
         self.pretrained_model = pretrained_model
         self.device_number = device_number
@@ -134,6 +134,8 @@ class WordSenseModel:
             print("Vocabulary:")
             print(self.vocab_map)
 
+        print(f"Vocabulary size: {len(self.vocab_map)}")
+
     def calculate_matrix(self, verbose=False):
         """
         Calculates embeddings for all word instances in corpus_file
@@ -147,7 +149,8 @@ class WordSenseModel:
             word_starts = [index for index, token in enumerate(bert_tokens) if not token.startswith("##")]
 
             # Replace all words in sentence to get their instance-embeddings
-            for word_pos, word in enumerate(words):
+            for word_pos, word in tqdm(enumerate(words)):
+                print(f"Processing {word} (position {word_pos}) with all vocabulary.")
                 if word not in instances:
                     instances[word] = []
                 instances[word].append(embeddings_count)
@@ -172,11 +175,12 @@ class WordSenseModel:
                         score = self.complete_probs(common_probs, left_sent, right_sent, repl_word)
                         sent_len = len(left_sent) + len(right_sent) + 1
 
-                    curr_prob = self.lang_mod.normalize_score(sent_len, score)
-                    embedding.append(curr_prob)
+                    # curr_prob = self.lang_mod.normalize_score(sent_len, score)
+                    # embedding.append(curr_prob)
+                    embedding.append(score)
 
                 # Store this sentence embeddings in the general list
-                self.matrix.append(np.float32(embedding))  # Lower precision to save mem, speed
+                self.matrix.append(normalize([embedding])[0])  # Store embedding normalized to unit vector
 
     def complete_probs(self, common_probs, left_sent, right_sent, word_token, verbose=False):
         """
@@ -317,20 +321,20 @@ class WordSenseModel:
 
     def init_estimator(self, save_to, clust_method='OPTICS', **kwargs):
         if clust_method == 'OPTICS':
-            self.min_samples = kwargs.get('min_samples', 1)
+            min_samples = kwargs.get('min_samples', 1)
             # Init clustering object
-            self.estimator = OPTICS(min_samples=self.min_samples, metric='cosine', n_jobs=4)
-            self.save_dir = save_to + "_OPTICS_minsamp" + str(self.min_samples)
+            self.estimator = OPTICS(min_samples=min_samples, metric='cosine', n_jobs=4)
+            self.save_dir = save_to + "_OPTICS_minsamp" + str(min_samples)
         elif clust_method == 'KMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
             self.freq_threshold = max(self.freq_threshold, k)
             self.estimator = KMeans(init="k-means++", n_clusters=k, n_jobs=4)
             self.save_dir = save_to + "_KMeans_k" + str(k)
         elif clust_method == 'DBSCAN':
-            self.min_samples = kwargs.get('min_samples', 2)
+            min_samples = kwargs.get('min_samples', 2)
             eps = kwargs.get('eps', 0.3)
-            self.estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=self.min_samples, eps=eps)
-            self.save_dir = save_to + "_DBSCAN_minsamp" + str(self.min_samples) + '_eps' + str(eps)
+            self.estimator = DBSCAN(metric='cosine', n_jobs=4, min_samples=min_samples, eps=eps)
+            self.save_dir = save_to + "_DBSCAN_minsamp" + str(min_samples) + '_eps' + str(eps)
         elif clust_method == 'SphericalKMeans':
             k = kwargs.get('k', 5)  # 5 is default value, if no kwargs were passed
             self.freq_threshold = max(self.freq_threshold, k)
@@ -371,7 +375,7 @@ class WordSenseModel:
 
             # Build embeddings list for this word
             curr_embeddings = [self.matrix[row] for _, _, row in instances]
-            curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
+            # curr_embeddings = normalize(curr_embeddings)  # Make unit vectors
 
             if len(curr_embeddings) < self.freq_threshold:  # Don't disambiguate if word is infrequent
                 print(f"Won't disambiguate word \"{word}\": frequency is lower than threshold")
@@ -473,8 +477,8 @@ if __name__ == '__main__':
     WSD.load_matrix(args.pickle_emb, args.corpus, verbose=args.verbose, norm_pickle=args.norm_pickle,
                     norm_file=args.norm_file)
 
-    # Remove top words from disambiguation
-    print(f"Removing the top {args.func_frac} fraction of words")
+    # Find most frequent words to not disambiguate them
+    print(f"Finding the top {args.func_frac} fraction of words")
     WSD.find_function_words(args.func_frac)
 
     print("Start disambiguation...")
